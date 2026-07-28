@@ -1,4 +1,6 @@
-# MOQ-Secure Encrypted Media Frame Format (ChaCha20-Poly1305 + Optional Ed25519 Leasing)
+# MOQ-Secure Encrypted Media Frame Format
+
+### ChaCha20-Poly1305 + Optional Ed25519 Leasing
 
 This document defines a **fixed wire format** for encrypted media frames via Media Over QUIC (MOQ).
 
