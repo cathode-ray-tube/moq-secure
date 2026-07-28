@@ -1,0 +1,11 @@
+{
+  "name": "moq-secure-js",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "tweetnacl": "^1.0.3"
+  }
+}
