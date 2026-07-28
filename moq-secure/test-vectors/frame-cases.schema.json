@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-46/schema",
+  "title": "MOQ-Secure Test Vectors",
+  "type": "object",
+  "required": ["cases"],
+  "properties": {
+    "cases": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/case" }
+    }
+  },
+  "$defs": {
+    "bytes": {
+      "type": "string",
+      "description": "Hex-encoded bytes, lowercase, even length (e.g., 00ff...)",
+      "pattern": "^[0-9a-f]*$"
+    },
+    "u8": { "type": "integer", "minimum": 0, "maximum": 255 },
+    "u64": { "type": "integer", "minimum": 0, "maximum": 18446744073709551615 },
+    "frameMode": {
+      "type": "string",
+      "enum": ["signing_disabled", "signed", "unsigned_lease_gated"]
+    },
+    "case": {
+      "type": "object",
+      "required": ["id", "mode", "inputs"],
+      "properties": {
+        "id": { "type": "string" },
+        "mode": { "$ref": "#/$defs/frameMode" },
+        "inputs": {
+          "type": "object",
+          "required": ["magic", "version", "key_id", "ctr", "n_signed", "sig_flag", "lease_remaining_expected", "plaintext", "cipher_key", "signing_keys"],
+          "properties": {
+            "magic": { "$ref": "#/$defs/bytes" },
+            "version": { "type": "integer", "minimum": 0, "maximum": 255 },
+            "key_id": { "$ref": "#/$defs/u8" },
+            "ctr": { "$ref": "#/$defs/u64" },
+            "n_signed": { "$ref": "#/$defs/u8" },
+            "sig_flag": { "$ref": "#/$defs/u8" },
+            "lease_remaining_expected": { "type": "integer", "minimum": 0, "maximum": 255 },
+
+            "plaintext": { "$ref": "#/$defs/bytes" },
+
+            "cipher_key": {
+              "type": "object",
+              "required": ["key_32"],
+              "properties": {
+                "key_32": { "$ref": "#/$defs/bytes" }
+              }
+            },
+
+            "signing_keys": {
+              "type": "object",
+              "description": "Use fixed deterministic keys for conformance; sign/verify must match across languages.",
+              "required": ["private_ed25519_32_seed", "public_ed25519_32"],
+              "properties": {
+                "private_ed25519_32_seed": { "$ref": "#/$defs/bytes" },
+                "public_ed25519_32": { "$ref": "#/$defs/bytes" }
+              }
+            },
+
+            "broadcaster_public_key_is_used_for_verify_only": { "type": "boolean", "default": true }
+          }
+        },
+
+        "expected": {
+          "type": "object",
+          "description": "All expected fields are optional; you can keep them out and only check decrypt results/roundtrip. If present, every language should match exactly.",
+          "properties": {
+            "nonce12": { "$ref": "#/$defs/bytes" },
+            "aad": { "$ref": "#/$defs/bytes" },
+
+            "ciphertext": { "$ref": "#/$defs/bytes" },
+            "aead_tag": { "$ref": "#/$defs/bytes" },
+
+            "header_without_sigslot": { "$ref": "#/$defs/bytes" },
+            "signature_digest_sha256": { "$ref": "#/$defs/bytes" },
+            "sig_slot": { "$ref": "#/$defs/bytes" },
+
+            "serialized_frame": { "$ref": "#/$defs/bytes" },
+            "expected_decrypted_plaintext": { "$ref": "#/$defs/bytes" },
+
+            "lease_acceptance": { "type": "string", "enum": ["accept", "drop"] },
+            "expected_lease_remaining_after": { "type": "integer", "minimum": 0, "maximum": 255 }
+          }
+        }
+      }
+    }
+  }
+}
