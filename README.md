@@ -1,6 +1,6 @@
 # MOQ-Secure Encrypted Media Frames
 
-A fixed wire format for encrypting **media payloads** carried over **Media Over QUIC (MOQ)** using AEAD encryption (ChaCha20-Poly1305) with an **optional Ed25519 signature**.
+A fixed wire format for encrypting **media payloads** carried by **Media Over QUIC (MOQ)** using AEAD encryption (ChaCha20-Poly1305) with an **optional Ed25519 signature**.
 
 > **Payload-Only Encryption:** MOQ is a payload-agnostic transport format — this spec encrypts only the frame’s media payload bytes (and binds them to the header via AEAD). Transport framing and routing remain unchanged.
 
