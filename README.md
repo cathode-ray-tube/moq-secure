@@ -61,6 +61,10 @@ This format is intended for implementations that want:
 - securing media payload confidentiality and integrity on a per-frame basis,
 - optionally adding authenticity for a subset of frames using a broadcaster key.
 
+## Interop
+
+Only encrypts the payload so should work with any MOQ implementation (moq-lite, IETF, etc).
+
 ## License
 
 This project is dual-licensed: MIT OR Apache-2.0, choose either. See LICENSE-MIT and LICENSE-APACHE-2.0 in the repository root.
