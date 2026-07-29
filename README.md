@@ -54,7 +54,7 @@ When signatures are enabled (`nSigned > 0`), signed frames are verified and act 
 
 ## Wire format details
 
-The complete on-the-wire field layout, byte concatenation rules, nonce/AAD/digest definitions, and receiver processing order live deeper in the repo for those who want the full technical [specification](https://github.com/cathode-ray-tube/moq-secure/blob/main/moq-secure/spec/SPECIFICATION.md)
+The complete on-the-wire field layout, byte concatenation rules, nonce/AAD/digest definitions, and receiver processing order live deeper in the repo for those who want the full technical [specification](https://github.com/cathode-ray-tube/moq-secure/blob/main/moq-secure/spec/README.md)
 
 ## Usage
 
