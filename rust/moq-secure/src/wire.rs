@@ -96,14 +96,33 @@ impl EncryptedFrame {
         let sig_flag = h[idx];
         idx += 1;
 
+        if sig_flag != 0 && sig_flag != 1 {
+            return Err(MoqSecureError::InvalidSignature);
+        }
+
         let mut sig_slot = [0u8; SIG_SLOT_LEN];
         sig_slot.copy_from_slice(&h[idx..idx + SIG_SLOT_LEN]);
+
+        if n_signed == 0 {
+            if sig_flag != 0 || sig_slot != [0u8; SIG_SLOT_LEN] {
+                return Err(MoqSecureError::SigningMismatch);
+            }
+        } else {
+            // When sig_flag==1, require sig_slot is not all zeros
+            if sig_flag == 1 && sig_slot == [0u8; SIG_SLOT_LEN] {
+                return Err(MoqSecureError::InvalidSignature);
+            }
+            // (When sig_flag==0, sig_slot can be all zeros as in your encrypt code.)
+        }
 
         if rest.len() < AEAD_TAG_LEN {
             return Err(MoqSecureError::CiphertextTooShort);
         }
         let (ciphertext, tag_bytes) = rest.split_at(rest.len() - AEAD_TAG_LEN);
-        let tag: [u8; AEAD_TAG_LEN] = tag_bytes.try_into().expect("16 bytes");
+
+        let tag: [u8; AEAD_TAG_LEN] = tag_bytes
+            .try_into()
+            .map_err(|_| MoqSecureError::CiphertextTooShort)?;
 
         Ok(EncryptedFrame {
             header: WireHeader {
@@ -170,7 +189,13 @@ pub fn encrypt_frame(
     };
 
     let aad = header.aad();
-    let (ciphertext, tag) = aead_encrypt(&keys[key_id as usize], key_id, ctr, &aad, plaintext);
+    let (ciphertext, tag) = aead_encrypt(
+        &keys[key_id as usize],
+        key_id,
+        ctr,
+        &aad,
+        plaintext,
+    );
 
     let mut frame = EncryptedFrame {
         header: header.clone(),
@@ -214,6 +239,11 @@ pub fn decrypt_frame(
     } else {
         // signing enabled: either a verified signed frame, or an unsigned gated frame
         if frame.header.sig_flag == 1 {
+            // (Already checked for all-zero in parse(), but keep for defense-in-depth.)
+            if frame.header.sig_slot == [0u8; SIG_SLOT_LEN] {
+                return Err(MoqSecureError::InvalidSignature);
+            }
+
             let digest = frame.digest_for_signature();
             let sig = ed25519_dalek::Signature::from_bytes(&frame.header.sig_slot)
                 .map_err(|_| MoqSecureError::InvalidSignature)?;
