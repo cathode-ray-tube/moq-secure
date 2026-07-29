@@ -58,7 +58,7 @@ All integers are **big-endian** unless otherwise stated.
 
 To avoid nonce reuse, the nonce is derived from (`keyId`, `ctr`).
 
-Below, "nonce" means ASCII bytes, 6e 6f 6e 63 65.
+Below, "nonce" means bytes: 0x6e 0x6f 0x6e 0x63 0x65.
 
 **Recommended:**
 - `nonce12 = SHA256("nonce" || keyId(1) || ctr(8))[0..12)`
