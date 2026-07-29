@@ -201,12 +201,18 @@ pub fn decrypt_frame(
 
     let frame = EncryptedFrame::parse(frame_bytes)?;
 
+    // ---- strict header/signature invariants ----
+    if frame.header.sig_flag != 0 && frame.header.sig_flag != 1 {
+        return Err(MoqSecureError::InvalidSignature);
+    }
+
     // signing disabled
     if frame.header.n_signed == 0 {
         if frame.header.sig_flag != 0 || frame.header.sig_slot != [0u8; SIG_SLOT_LEN] {
             return Err(MoqSecureError::SigningMismatch);
         }
     } else {
+        // signing enabled: either a verified signed frame, or an unsigned gated frame
         if frame.header.sig_flag == 1 {
             let digest = frame.digest_for_signature();
             let sig = ed25519_dalek::Signature::from_bytes(&frame.header.sig_slot)
@@ -214,6 +220,8 @@ pub fn decrypt_frame(
             broadcaster_public_key
                 .verify(&digest, &sig)
                 .map_err(|_| MoqSecureError::InvalidSignature)?;
+
+            // renew lease to accept unsigned frames
             *lease_remaining = frame.header.n_signed;
         } else {
             // unsigned frame: lease gating
@@ -224,7 +232,7 @@ pub fn decrypt_frame(
         }
     }
 
-    // AEAD decrypt
+    // ---- AEAD decrypt ----
     let aad = frame.aad_bytes();
     aead_decrypt(
         &keys[frame.header.key_id as usize],
