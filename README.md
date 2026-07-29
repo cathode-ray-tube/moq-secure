@@ -40,7 +40,7 @@ Each encrypted frame contains:
 
 - **Confidentiality & integrity**: `ChaCha20-Poly1305`
 - **Nonce derivation**: derived from `(keyId, ctr)` to prevent nonce reuse
-- **Optional signatures**: `Ed25519` over a `SHA-256` digest that excludes `sigSlot` bytes from the hashed/signed structure
+- **Optional signatures**: `Ed25519` over a `SHA-256` digest that excludes `sigSlot` bytes from the hashed structure
 
 ## Signing
 
