@@ -22,7 +22,7 @@ A fixed wire format for end-to-end encrypting **media payloads** carried by **Me
 Each encrypted frame contains:
 
 1. **Unencrypted header (parse first)**  
-   Fields include:
+   Fields:
    - `magic` (constant `"MOQS"`)
    - `version`
    - `keyId` (supports key rotation)
