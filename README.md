@@ -70,6 +70,3 @@ Only encrypts the payload so should work with any MOQ implementation (moq-lite, 
 ## License
 
 This project is dual-licensed: MIT OR Apache-2.0, choose either. See LICENSE-MIT and LICENSE-APACHE-2.0 in the repository root.
-
-
-For detailed spec, see [SPECIFICATION](https://github.com/cathode-ray-tube/moq-secure/blob/main/moq-secure/spec/SPECIFICATION.md))
