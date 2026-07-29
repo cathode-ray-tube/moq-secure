@@ -1,4 +1,4 @@
-![moq-secure logo](./assets/moq-secure-logo-512.png)
+![moq-secure logo](./assets/moq-secure-logo-256.png)
 
 # MOQ-Secure Encrypted Media Frames
 
