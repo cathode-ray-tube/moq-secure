@@ -67,6 +67,8 @@ This format is intended for implementations that want:
 
 Only encrypts the payload so should work with any MOQ implementation (moq-lite, IETF, etc).
 
+While aimed at MOQ, with some additional wiring, it could encrypt any data sent via other transport (such as WebSockets). 
+
 ## License
 
 This project is dual-licensed: MIT OR Apache-2.0, choose either. See LICENSE-MIT and LICENSE-APACHE-2.0 in the repository root.
