@@ -33,7 +33,7 @@ All integers are **big-endian** unless otherwise stated.
 
 | Field | Size | Description |
 |---|---:|---|
-| `magic` | 4 bytes | Constant magic value (ASCII `MOQS` bytes: 0x4d 0x4f 0x51 0x53) |
+| `magic` | 4 bytes | Constant magic value (`MOQS` bytes: 0x4d 0x4f 0x51 0x53) |
 | `version` | 1 byte | Format version (start with `1`) |
 | `keyId` | 1 byte | Selects symmetric key (supports key rotation) |
 | `ctr` | 8 bytes | Frame counter (`uint64`), random start then incrementing |
