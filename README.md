@@ -14,7 +14,7 @@ A fixed wire format for end-to-end encrypting **media payloads** carried by **Me
   - Always includes a **64-byte `sigSlot`**
   - When unsigned, `sigSlot` is **all zeros**
 - **Designed for lossy delivery & late join**:
-  - A per-stream `ctr` enables safe nonce derivation (random start, monotonic increment)
+  - A per-stream frame `ctr` enables safe nonce derivation (random start, monotonic increment)
   - Signed frames refresh a bounded “lease” for admitting unsigned frames
 
 ## Frame overview
