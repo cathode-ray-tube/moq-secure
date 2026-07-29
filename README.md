@@ -67,7 +67,7 @@ This format is intended for implementations that want:
 
 Only encrypts the payload so should work with any MOQ implementation (moq-lite, IETF, etc).
 
-While aimed at MOQ, with some additional wiring, it could encrypt any data sent via other transport (such as WebSockets). 
+While aimed at MOQ, with some additional wiring, it could encrypt any data sent via other transports (such as WebSockets). 
 
 ## License
 
