@@ -59,7 +59,7 @@ The complete on-the-wire field layout, byte concatenation rules, nonce/AAD/diges
 ## Usage
 
 This format is intended for implementations that want:
-- MOQ’s payload-agnostic transport benefits, while
+- MOQ’s media-agnostic transport benefits, while
 - securing media payload confidentiality and integrity on a per-frame basis,
 - optionally adding authenticity for a subset of frames using a broadcaster key.
 
