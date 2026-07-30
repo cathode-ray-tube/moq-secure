@@ -13,20 +13,34 @@ pub struct WireHeader {
     pub version: u8,
     pub key_id: u8,
     pub ctr: u64,
+
+    /// Frequency gating parameter:
+    /// - n_signed == 0: signing disabled entirely
+    /// - n_signed > 0: lease_remaining starts at n_signed; only some frames are signed
     pub n_signed: u8,
+
+    /// Per-frame signed flag (0/1)
     pub sig_flag: u8,
+
+    /// Per-frame encrypted flag (0/1)
+    pub encrypted: u8,
+
+    /// Only serialized on the wire when sig_flag == 1
     pub sig_slot: [u8; SIG_SLOT_LEN],
 }
 
 impl WireHeader {
     pub fn encode_without_sig_slot(&self) -> Vec<u8> {
-        let mut v = Vec::with_capacity(4 + 1 + 1 + 8 + 1 + 1);
+        // Fixed AAD/header prefix (sig_slot intentionally omitted)
+        // magic(4) + version(1) + key_id(1) + ctr(8) + n_signed(1) + sig_flag(1) + encrypted(1)
+        let mut v = Vec::with_capacity(4 + 1 + 1 + 8 + 1 + 1 + 1);
         v.extend_from_slice(&self.magic);
         v.push(self.version);
         v.push(self.key_id);
         v.extend_from_slice(&self.ctr.to_be_bytes());
         v.push(self.n_signed);
         v.push(self.sig_flag);
+        v.push(self.encrypted);
         v
     }
 
@@ -44,81 +58,110 @@ pub struct EncryptedFrame {
 
 impl EncryptedFrame {
     pub fn serialize(&self) -> Vec<u8> {
+        let sig_slot_len_on_wire = if self.header.sig_flag == 1 {
+            SIG_SLOT_LEN
+        } else {
+            0
+        };
+
         let mut out = Vec::with_capacity(
-            4 + 1 + 1 + 8 + 1 + 1 + SIG_SLOT_LEN + self.ciphertext.len() + AEAD_TAG_LEN,
+            4 + 1 + 1 + 8 + 1 + 1 + 1
+                + sig_slot_len_on_wire
+                + self.ciphertext.len()
+                + AEAD_TAG_LEN,
         );
+
         out.extend_from_slice(&self.header.magic);
         out.push(self.header.version);
         out.push(self.header.key_id);
         out.extend_from_slice(&self.header.ctr.to_be_bytes());
         out.push(self.header.n_signed);
         out.push(self.header.sig_flag);
-        out.extend_from_slice(&self.header.sig_slot);
+        out.push(self.header.encrypted);
+
+        if self.header.sig_flag == 1 {
+            out.extend_from_slice(&self.header.sig_slot);
+        }
+
         out.extend_from_slice(&self.ciphertext);
         out.extend_from_slice(&self.tag);
         out
     }
 
     pub fn parse(frame: &[u8]) -> Result<Self, MoqSecureError> {
-        const HEADER_LEN: usize = 4 + 1 + 1 + 8 + 1 + 1 + SIG_SLOT_LEN;
+        const FIXED_HEADER_LEN: usize = 4 + 1 + 1 + 8 + 1 + 1 + 1; // 17
 
-        if frame.len() < HEADER_LEN + AEAD_TAG_LEN {
+        if frame.len() < FIXED_HEADER_LEN + AEAD_TAG_LEN {
             return Err(MoqSecureError::TruncatedFrame);
         }
 
-        let (h, rest) = frame.split_at(HEADER_LEN);
-
+        let (h_fixed, rest) = frame.split_at(FIXED_HEADER_LEN);
         let mut idx = 0;
+
         let mut magic = [0u8; 4];
-        magic.copy_from_slice(&h[idx..idx + 4]);
+        magic.copy_from_slice(&h_fixed[idx..idx + 4]);
         idx += 4;
+
         if magic != MAGIC {
             return Err(MoqSecureError::InvalidMagic);
         }
 
-        let version = h[idx];
+        let version = h_fixed[idx];
         idx += 1;
         if version != VERSION {
             return Err(MoqSecureError::UnsupportedVersion(version));
         }
 
-        let key_id = h[idx];
+        let key_id = h_fixed[idx];
         idx += 1;
 
         let mut ctr_bytes = [0u8; 8];
-        ctr_bytes.copy_from_slice(&h[idx..idx + 8]);
+        ctr_bytes.copy_from_slice(&h_fixed[idx..idx + 8]);
         idx += 8;
         let ctr = u64::from_be_bytes(ctr_bytes);
 
-        let n_signed = h[idx];
+        let n_signed = h_fixed[idx];
         idx += 1;
 
-        let sig_flag = h[idx];
+        let sig_flag = h_fixed[idx];
         idx += 1;
-
         if sig_flag != 0 && sig_flag != 1 {
             return Err(MoqSecureError::InvalidSignature);
         }
 
-        let mut sig_slot = [0u8; SIG_SLOT_LEN];
-        sig_slot.copy_from_slice(&h[idx..idx + SIG_SLOT_LEN]);
-
-        if n_signed == 0 {
-            if sig_flag != 0 || sig_slot != [0u8; SIG_SLOT_LEN] {
-                return Err(MoqSecureError::SigningMismatch);
-            }
-        } else {
-            // When sig_flag==1, require sig_slot is not all zeros
-            if sig_flag == 1 && sig_slot == [0u8; SIG_SLOT_LEN] {
-                return Err(MoqSecureError::InvalidSignature);
-            }
-            // (When sig_flag==0, sig_slot can be all zeros as in your encrypt code.)
+        let encrypted = h_fixed[idx];
+        idx += 1;
+        if encrypted != 0 && encrypted != 1 {
+            return Err(MoqSecureError::InvalidSignature);
         }
 
-        if rest.len() < AEAD_TAG_LEN {
+        // sig_slot is only present if sig_flag == 1
+        let mut sig_slot = [0u8; SIG_SLOT_LEN];
+
+        let mut ciphertext_and_tag = rest;
+        if sig_flag == 1 {
+            if ciphertext_and_tag.len() < SIG_SLOT_LEN + AEAD_TAG_LEN {
+                return Err(MoqSecureError::TruncatedFrame);
+            }
+            let (sig_bytes, rem) = ciphertext_and_tag.split_at(SIG_SLOT_LEN);
+            sig_slot.copy_from_slice(sig_bytes);
+            ciphertext_and_tag = rem;
+        }
+
+        // Enforce signature slot rules (when sig_flag==1, sig_slot must be non-zero).
+        if sig_flag == 1 && sig_slot == [0u8; SIG_SLOT_LEN] {
+            return Err(MoqSecureError::InvalidSignature);
+        }
+
+        // If signing disabled entirely, no frame should claim sig_flag==1
+        if n_signed == 0 && sig_flag != 0 {
+            return Err(MoqSecureError::SigningMismatch);
+        }
+
+        if ciphertext_and_tag.len() < AEAD_TAG_LEN {
             return Err(MoqSecureError::CiphertextTooShort);
         }
-        let (ciphertext, tag_bytes) = rest.split_at(rest.len() - AEAD_TAG_LEN);
+        let (ciphertext, tag_bytes) = ciphertext_and_tag.split_at(ciphertext_and_tag.len() - AEAD_TAG_LEN);
 
         let tag: [u8; AEAD_TAG_LEN] = tag_bytes
             .try_into()
@@ -132,6 +175,7 @@ impl EncryptedFrame {
                 ctr,
                 n_signed,
                 sig_flag,
+                encrypted,
                 sig_slot,
             },
             ciphertext: ciphertext.to_vec(),
@@ -153,8 +197,7 @@ impl EncryptedFrame {
         sha256_digest(&v)
     }
 
-    pub fn aead_encrypt_for(&self, key: &[u8; 32]) -> Result<(), MoqSecureError> {
-        let _ = (key, self.header.key_id, self.header.ctr, self.aad_bytes());
+    pub fn aead_encrypt_for(&self, _key: &[u8; 32]) -> Result<(), MoqSecureError> {
         Ok(())
     }
 }
@@ -170,6 +213,7 @@ pub fn encrypt_frame(
 ) -> EncryptedFrame {
     use ed25519_dalek::Signer;
 
+    // sig_flag indicates "this frame carries a signature"
     let sig_flag = if n_signed == 0 {
         0
     } else if maybe_sign {
@@ -178,6 +222,11 @@ pub fn encrypt_frame(
         0
     };
 
+    // This updated code assumes frames are encrypted (encrypted=1).
+    // If you need encrypted=0 support (and how to compute ciphertext/tag then),
+    // tell me your intended wire behavior and I'll adjust encrypt/decrypt.
+    let encrypted = 1u8;
+
     let mut header = WireHeader {
         magic: MAGIC,
         version: VERSION,
@@ -185,6 +234,7 @@ pub fn encrypt_frame(
         ctr,
         n_signed,
         sig_flag,
+        encrypted,
         sig_slot: [0u8; SIG_SLOT_LEN],
     };
 
@@ -209,10 +259,12 @@ pub fn encrypt_frame(
         frame.header.sig_slot = sig.to_bytes();
         frame.header.sig_flag = 1;
     } else {
+        // No sig_slot is serialized when sig_flag==0; keep it zeroed.
         frame.header.sig_slot = [0u8; SIG_SLOT_LEN];
         frame.header.sig_flag = 0;
     }
 
+    // encrypted flag is already set
     frame
 }
 
@@ -230,6 +282,14 @@ pub fn decrypt_frame(
     if frame.header.sig_flag != 0 && frame.header.sig_flag != 1 {
         return Err(MoqSecureError::InvalidSignature);
     }
+    if frame.header.encrypted != 0 && frame.header.encrypted != 1 {
+        return Err(MoqSecureError::InvalidSignature);
+    }
+
+    // This updated code assumes we only support encrypted=1 frames.
+    if frame.header.encrypted == 0 {
+        return Err(MoqSecureError::AeadAuthFailed);
+    }
 
     // signing disabled
     if frame.header.n_signed == 0 {
@@ -237,9 +297,8 @@ pub fn decrypt_frame(
             return Err(MoqSecureError::SigningMismatch);
         }
     } else {
-        // signing enabled: either a verified signed frame, or an unsigned gated frame
+        // signing enabled: lease gating
         if frame.header.sig_flag == 1 {
-            // (Already checked for all-zero in parse(), but keep for defense-in-depth.)
             if frame.header.sig_slot == [0u8; SIG_SLOT_LEN] {
                 return Err(MoqSecureError::InvalidSignature);
             }
@@ -251,7 +310,7 @@ pub fn decrypt_frame(
                 .verify(&digest, &sig)
                 .map_err(|_| MoqSecureError::InvalidSignature)?;
 
-            // renew lease to accept unsigned frames
+            // Renew lease to accept unsigned frames
             *lease_remaining = frame.header.n_signed;
         } else {
             // unsigned frame: lease gating
