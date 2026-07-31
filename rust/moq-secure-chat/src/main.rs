@@ -1,11 +1,12 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use ed25519_dalek::{SigningKey, VerifyingKey};
-use moq_native::moq_net::origin::Producer;
 use moq_native::moq_net::*;
 use std::io::{self, Write};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use url::Url;
+
+use base64::Engine;
 
 use moq_secure::{decrypt_frame, encrypt_frame};
 use moq_secure::error::MoqSecureError;
@@ -43,7 +44,9 @@ fn parse_signing_key(s: &str) -> Result<SigningKey> {
 fn parse_verify_key(s: &str) -> Result<VerifyingKey> {
     // 32-byte public key expected
     let pk = parse_key32(s, "verifyKey")?;
-    Ok(VerifyingKey::from_bytes(&pk))
+    let vk = VerifyingKey::from_bytes(&pk)
+        .map_err(|e| anyhow::anyhow!(e))?;
+    Ok(vk)
 }
 
 #[derive(Parser, Debug)]
@@ -148,7 +151,10 @@ async fn publish(
 
     // Create broadcast + track.
     let mut broadcast_obj = origin
-        .create_broadcast(broadcast, moq_native::moq_net::broadcast::Route::new().with_announce(true))
+        .create_broadcast(
+            broadcast,
+            moq_native::moq_net::broadcast::Route::new().with_announce(true),
+        )
         .context("failed to create broadcast")?;
 
     let mut track_pub = broadcast_obj
@@ -245,7 +251,6 @@ async fn subscribe(
         .announced();
 
     let mut lease_remaining: u8 = 0;
-
     let mut track_sub: Option<moq_native::moq_net::track::Subscriber> = None;
 
     loop {
@@ -254,7 +259,8 @@ async fn subscribe(
                 if let Some(b) = broadcast {
                     let _ = path;
                     println!("Broadcast online; subscribing to track…");
-                    // Subscribe to track within the broadcast.
+
+                    // NOTE: keeping your existing type inference here.
                     let t = b.track(&track)
                         .context("track not in broadcast")?
                         .subscribe(None).await
@@ -264,15 +270,14 @@ async fn subscribe(
                     println!("Broadcast offline; waiting…");
                 }
             }
+
             res = reconnect.closed() => {
-                // connection closed
                 res.map_err(|e| anyhow::anyhow!("subscriber closed: {e:?}"))?;
                 return Ok(());
             }
-            // If we have an active track subscription, run its receive loop one group at a time.
+
             Some(result) = async {
                 if let Some(ref mut tsub) = track_sub {
-                    // Receive the next group; this will await until one arrives.
                     let grp = tsub.recv_group().await.ok()?;
                     Some(grp)
                 } else {
@@ -284,7 +289,14 @@ async fn subscribe(
                     None => continue,
                 };
 
-                while let Some(frame) = group.read_frame().await.ok()? {
+                loop {
+                    // read_frame() yields Option<Frame> in your current setup,
+                    // so don't use `.ok()?` here.
+                    let frame = match group.read_frame().await {
+                        Some(f) => f,
+                        None => break,
+                    };
+
                     let payload = frame.payload;
 
                     match decrypt_frame(
@@ -298,10 +310,13 @@ async fn subscribe(
                             println!("{text}");
                         }
                         Err(e) => {
-                            // keep going; show error
                             match e {
-                                MoqSecureError::InvalidSignature => eprintln!("Frame rejected: invalid signature"),
-                                MoqSecureError::AeadAuthFailed => eprintln!("Frame rejected: AEAD auth failed"),
+                                MoqSecureError::InvalidSignature => {
+                                    eprintln!("Frame rejected: invalid signature")
+                                }
+                                MoqSecureError::AeadAuthFailed => {
+                                    eprintln!("Frame rejected: AEAD auth failed")
+                                }
                                 other => eprintln!("Frame rejected: {other:?}"),
                             }
                         }
