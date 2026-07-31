@@ -56,6 +56,11 @@ When signatures are enabled (`nSigned > 0`), signed frames are verified and act 
 
 The complete on-the-wire field layout, byte concatenation rules, nonce/AAD/digest definitions, and receiver processing order live deeper in the repo for those who want the full technical [specification](https://github.com/cathode-ray-tube/moq-secure/blob/main/spec/README.md)
 
+**Spec is being updated:** 
+**Add an 'encrypted' flag to header, normally 1 but 0 when only signing is required. Plaintext will replace ciphertext (and no 16-byte aead) when not encrypted**
+**SigSlot will only be present for signed frames (currently 64 zero bytes)**
+**These changes are to reduce overhead and provide more options**
+
 ## Usage
 
 This format is intended for implementations that want:
