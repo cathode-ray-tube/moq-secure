@@ -60,7 +60,7 @@ The complete on-the-wire field layout, byte concatenation rules, nonce/AAD/diges
 
 **Add an 'encrypted' flag to header, normally 1 but 0 when only signing is required. Plaintext will replace ciphertext (and no 16-byte aead) when not encrypted.**
 
-**SigSlot will only be present for signed frames (currently 64 zero bytes).**
+**SigSlot will only be present for signed frames (currently 64 zero bytes for unsigned frames).**
 
 **These changes are to reduce overhead and provide more options.**
 
