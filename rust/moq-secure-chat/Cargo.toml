@@ -11,6 +11,6 @@ tracing = "0.1"
 url = "2"
 
 moq-net = "0.2.6"
-moq-native = "0.2.6" 
+moq-native = { version = "0.19.5" }
 
 moq-secure = { path = "../moq-secure" }
