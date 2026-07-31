@@ -255,13 +255,13 @@ async fn subscribe(
 
     loop {
         tokio::select! {
-            Some(moq_native::announce::Update { path, broadcast }) = origin.next() => {
+            Some(moq_net::announce::Update { path, broadcast }) = origin.next() => {
                 if let Some(b) = broadcast {
                     let _ = path;
                     println!("Broadcast online; subscribing to track…");
 
-                    // NOTE: keeping your existing type inference here.
-                    let t = b.track(&track)
+                    let t = b
+                        .track(track)
                         .context("track not in broadcast")?
                         .subscribe(None).await
                         .context("failed to subscribe track")?;
@@ -290,11 +290,10 @@ async fn subscribe(
                 };
 
                 loop {
-                    // read_frame() yields Option<Frame> in your current setup,
-                    // so don't use `.ok()?` here.
                     let frame = match group.read_frame().await {
-                        Some(f) => f,
-                        None => break,
+                        Ok(Some(f)) => f,
+                        Ok(None) => break,
+                        Err(e) => return Err(anyhow::anyhow!("read_frame failed: {e:?}")),
                     };
 
                     let payload = frame.payload;
