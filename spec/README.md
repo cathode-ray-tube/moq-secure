@@ -21,6 +21,14 @@ This document defines a **fixed wire format** for encrypted media frames via Med
 
 > Handshake / out-of-band key exchange done separately (such as via separate WebSocket server or shared in person via a QR Code).
 
+**Spec is being updated:**
+
+**Add an 'encrypted' flag to header, normally 1 but 0 when only signing is required. Plaintext will replace ciphertext (and no 16-byte aead) when not encrypted.**
+
+**SigSlot will only be present for signed frames (currently 64 zero bytes for unsigned frames).**
+
+**These changes are to reduce overhead and provide more options.**
+
 ---
 
 ## 1) Wire Format (fixed)
