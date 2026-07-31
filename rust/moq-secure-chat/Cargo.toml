@@ -10,7 +10,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 tracing = "0.1"
 url = "2"
 
-moq-native = { version = "0.19.5" }
-moq-net = "0.19.5"
+moq-net = "0.2.6"
+moq-native = "0.2.6" 
 
 moq-secure = { path = "../moq-secure" }
