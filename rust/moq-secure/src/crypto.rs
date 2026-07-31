@@ -242,7 +242,7 @@ pub fn encrypt_frame(
     n_signed: u8,
     maybe_sign: bool,
 
-    /// user-controlled encryption mode (0/1)
+    // user-controlled encryption mode (0/1)
     encrypted: u8,
 
     plaintext: &[u8],
