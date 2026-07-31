@@ -304,8 +304,7 @@ pub fn decrypt_frame(
             }
 
             let digest = frame.digest_for_signature();
-            let sig = ed25519_dalek::Signature::from_bytes(&frame.header.sig_slot)
-                .map_err(|_| MoqSecureError::InvalidSignature)?;
+            let sig = ed25519_dalek::Signature::from_bytes(&frame.header.sig_slot);
             broadcaster_public_key
                 .verify(&digest, &sig)
                 .map_err(|_| MoqSecureError::InvalidSignature)?;
