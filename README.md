@@ -13,7 +13,7 @@ People increasingly want to protect their communications from pervasive monitori
 MOQ-Secure is designed to provide:
 - **Privacy** for the media payload (so content can’t be inspected in transit)
 - **Integrity** (so tampering is detected)
-- **Optional authenticity** (so some frames can be verified as coming from a broadcaster)
+- **Authenticity** (so frames can be verified as coming from a broadcaster)
 
 ## Frame overview
 
@@ -28,7 +28,7 @@ Each frame contains an unencrypted header followed by a payload area and an opti
    - `nSigned` (lease/signing parameter; `0` disables Ed25519 entirely)
    - `sigFlag` (0 = unsigned, 1 = signed)
    - `encrypted` (normally 1; 0 when only signing is required / no AEAD encryption)
-   - `padLen` (3 bytes, last in the header) — indicates the number of **padding bytes appended to the plaintext before encryption** (padding may be present; if present, it is appended to plaintext prior to encryption)
+   - `padLen` (3 bytes, last in the header) — indicates the number of **padding bytes prepended to the plaintext before encryption** (padding may be present; if present, it is prepended to plaintext prior to encryption)
 
 2. **Payload area (conditional on `encrypted`)**
    - If `encrypted = 1`:
@@ -56,10 +56,14 @@ Let:
 - `plaintext` be the decrypted bytes (length equals ciphertext length)
 - `padLen` be the padding length from the header (0 allowed)
 
-Then:
-- `usablePlaintext = plaintext[0 : len(plaintext) - padLen]`
+Then, since padding is **prepended**:
+- `usablePlaintext = plaintext[padLen : len(plaintext)]`
 
-When `encrypted = 0`, padding (if any) is likewise treated as appended to plaintext bytes before any signing-only processing.
+When `encrypted = 0`, padding (if any) is likewise treated as prepended to plaintext bytes before any signing-only processing.
+
+### Frame Layout (exists within MOQ frame payload):
+
+![moq-secure frame layout](./assets/moq-secure-frame-layout.jpeg)
 
 ## Keys
 
@@ -84,7 +88,7 @@ This symmetric key material is delivered to authorized receivers via a **separat
 - **Encryption**
   - `ChaCha20-Poly1305` (AEAD)
   - Provides confidentiality + integrity for each frame’s media payload.
-  - Benefits of the choice:
+  - Benefits:
     - ChaCha20-Poly1305 is efficient on a wide range of platforms, including environments without dedicated AES acceleration.
     - AEAD ensures the payload is both encrypted and integrity-protected in a single step, reducing implementation complexity and protecting against active tampering.
 
@@ -94,7 +98,7 @@ This symmetric key material is delivered to authorized receivers via a **separat
 
 - **Signing**
   - `Ed25519` over a `SHA-256` digest.
-  - Benefits of the choice:
+  - Benefits:
     - Ed25519 offers fast, compact signatures suitable for per-frame (selective) verification.
     - Ed25519 provides strong authenticity guarantees, enabling receivers to distinguish real broadcaster content from tampered or injected media.
 
@@ -134,4 +138,5 @@ While aimed at MOQ, with some additional wiring it could encrypt any data sent v
 ## License
 
 This project is dual-licensed: MIT OR Apache-2.0, choose either. See LICENSE-MIT and LICENSE-APACHE-2.0 in the repository root.
+
 
