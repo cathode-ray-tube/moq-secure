@@ -1,4 +1,4 @@
-![moq-secure frame layout](./assets/moq-secure-frame-layout.jpeg)
+![moq-secure frame layout](./assets/moq-secure-frame-layout.jpeg](https://github.com/cathode-ray-tube/moq-secure/blob/main/assets/moq-secure-frame-layout.jpeg)
 
 # MOQ-Secure Encrypted Media Frame Format
 
