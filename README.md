@@ -28,7 +28,7 @@ Each frame contains an unencrypted header followed by a payload area and an opti
    - `nSigned` (lease/signing parameter; `0` disables Ed25519 entirely)
    - `sigFlag` (0 = unsigned, 1 = signed)
    - `encrypted` (normally 1; 0 when only signing is required / no AEAD encryption)
-   - `padLen` (3 bytes, last in the header) — indicates the number of **padding bytes prepended to the plaintext before encryption** (padding may be present; if present, it is prepended to plaintext prior to encryption)
+   - `padLen` (4 bytes, last in the header) — indicates the number of **padding bytes prepended to the plaintext before encryption** (padding may be present; if present, it is prepended to plaintext prior to encryption)
 
 2. **Payload area (conditional on `encrypted`)**
    - If `encrypted = 1`:
