@@ -11,9 +11,9 @@ A fixed wire format for end-to-end encrypting **media payloads** carried by **Me
 People increasingly want to protect their communications from pervasive monitoring and mass surveillance. At the same time, audiences need confidence that media is genuine: in an era of deepfakes, you often can’t tell whether a video or audio clip truly came from the person it claims to be.
 
 MOQ-Secure is designed to provide:
-- **Privacy** for the media payload (so content can’t be inspected in transit)
-- **Integrity** (so tampering is detected)
-- **Authenticity** (so frames can be verified as coming from a broadcaster)
+- **Privacy** for the media payload - so content can’t be inspected in transit
+- **Integrity** - so tampering is detected
+- **Authenticity** - so frames can be verified as coming from a broadcaster
 
 ## Frame overview
 
