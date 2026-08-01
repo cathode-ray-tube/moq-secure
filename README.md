@@ -63,7 +63,7 @@ When `encrypted = 0`, padding (if any) is likewise treated as prepended to plain
 
 ### Frame layout (nested within MOQ frame payload):
 
-![moq-secure frame layout](./assets/moq-secure-frame-layout.jpeg)
+![moq-secure frame layout](https://github.com/cathode-ray-tube/moq-secure/blob/main/assets/moq-secure-frame-layout.jpeg)
 
 ## Keys
 
