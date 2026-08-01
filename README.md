@@ -14,6 +14,7 @@ MOQ-Secure is designed to provide:
 - **Privacy** for the media payload - so content can’t be inspected in transit
 - **Integrity** - so tampering is detected
 - **Authenticity** - so frames can be verified as coming from a broadcaster
+- **Flexibility** - balancing security and performance
 
 ## Frame overview
 
