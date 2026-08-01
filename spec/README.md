@@ -114,7 +114,7 @@ If `nSigned > 0`:
 - Some frames will be signed (`sigFlag = 1`) and include an Ed25519 signature trailer.
 - `nSigned` value indicates signing frequency:
   - `nSigned = 1` would mean **every** frame is signed.
-  - `nSigned = 30` would mean only **every 30th** frame is signed.
+  - `nSigned = 30` would mean **only every 30th** frame is signed.
 - Other frames will be unsigned (`sigFlag = 0`) with no signature trailer.
 
 ### 4.3 What gets signed
