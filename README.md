@@ -1,6 +1,6 @@
 ![moq-secure logo](./assets/moq-secure-logo-256.png)
 
-# MOQ-Secure Media Frame Encryption
+# MOQ-Secure Media Encryption & Signing
 
 A fixed wire format for end-to-end encrypting **media payloads** carried by **Media Over QUIC (MOQ)** using AEAD encryption (ChaCha20-Poly1305) with an **optional Ed25519 signature**.
 
