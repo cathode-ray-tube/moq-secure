@@ -61,7 +61,7 @@ Then, since padding is **prepended**:
 
 When `encrypted = 0`, padding (if any) is likewise treated as prepended to plaintext bytes before any signing-only processing.
 
-### Frame Layout (exists within MOQ frame payload):
+### Frame layout (exists within MOQ frame payload):
 
 ![moq-secure frame layout](./assets/moq-secure-frame-layout.jpeg)
 
