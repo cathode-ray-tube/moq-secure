@@ -68,13 +68,14 @@ The Ed25519 signature is appended **after** the payload area.
 Signature bytes are **never included in AEAD AAD**.
 
 ---
-
-## 2) Nonce Derivation (12 bytes, derived; not sent)
+### 2) Nonce Derivation (12 bytes, derived; not sent)
 
 To avoid nonce reuse, the nonce is derived from (`keyId`, `ctr`).
 
 **Recommended:**
-- `nonce12 = SHA256("nonce" || keyId(1) || ctr(8))[0..12)`
+- Let `nonceTag =` the ASCII bytes of the string `"nonce"`:
+  - `nonceTag = 0x6e 0x6f 0x6e 0x63 0x65`
+- `nonce12 = SHA256(nonceTag || keyId(1) || ctr(8))[0..12)`
 
 Both sender and receiver MUST use the same derivation.
 
