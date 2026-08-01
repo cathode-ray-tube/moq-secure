@@ -31,18 +31,18 @@ Each frame is serialized in this exact order.
 
 ### 1.1 Unencrypted Header (parse first)
 
-All integers are **big-endian** unless otherwise stated.
+All integers are big-endian unless otherwise stated.
 
-| Field | Size | Description |
-|---|---:|---|
-| `magic` | 4 bytes | Constant magic value (`MOQS` bytes: `0x4d 0x4f 0x51 0x53`) |
-| `version` | 1 byte | Format version (start with `1`) |
-| `keyId` | 1 byte | Selects symmetric key (supports key rotation) |
-| `ctr` | 8 bytes | Frame counter (`uint64`), random start then incrementing |
-| `nSigned` | 1 byte | Lease/signing parameter: `0` disables Ed25519 signing entirely; otherwise lease admission parameter |
-| `sigFlag` | 1 byte | `0` = unsigned frame; `1` = signature trailer appended at end |
-| `encrypted` | 1 byte | `1` = AEAD encryption used; `0` = signing-only (no AEAD tag; payload is plaintext) |
-| `padLen` | 4 bytes | Number of **padding bytes prepended to the plaintext** before encryption (0 allowed). Used to compute usable plaintext bytes. |
+| Field | Type | Size | Description |
+|---|---|---:|---|
+| `magic` | `bytes[4]` | 4 bytes | Constant ASCII magic value (`MOQS` bytes: `0x4d 0x4f 0x51 0x53`) |
+| `version` | `uint8` | 1 byte | Format version (start with `1`) |
+| `keyId` | `uint8` | 1 byte | Selects symmetric key (supports key rotation) |
+| `ctr` | `uint64` | 8 bytes | Frame counter (`uint64`), random start then incrementing |
+| `nSigned` | `uint8` | 1 byte | Lease/signing parameter: `0` disables Ed25519 signing entirely; otherwise lease admission parameter |
+| `sigFlag` | `uint8` | 1 byte | `0` = unsigned frame; `1` = signature trailer appended at end |
+| `encrypted` | `uint8` | 1 byte | `1` = AEAD encryption used; `0` = signing-only (no AEAD tag; payload is plaintext) |
+| `padLen` | `uint32` | 4 bytes | Number of padding bytes prepended to the plaintext before encryption (0 allowed). Used to compute usable plaintext bytes. |
 
 **Note:** There is **no fixed signature slot in the header**. If a signature is present, it is appended as a trailer.
 
