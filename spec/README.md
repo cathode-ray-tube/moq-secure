@@ -20,6 +20,7 @@ This document defines a **wire format** for encrypted media frames via Media Ove
 - Support two encryption modes:
   - **Signing enabled**: `nSigned > 0`
   - **Signing disabled**: `nSigned == 0` (receivers skip signature verification entirely)
+- Flexibility around user requirements, balancing security and performance.
 
 > Handshake / out-of-band key exchange is done separately (such as via separate WebSocket/HTTP server or shared in person via QR Code).
 
