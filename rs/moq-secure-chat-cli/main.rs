@@ -62,14 +62,14 @@ fn random_track_hex() -> String {
 fn build_subscribe_command(base: &Cli, track: &str, keys: &ChatKeys) -> String {
     let cmd = format!(
         "moq-secure-chat-cli --relay {} --broadcast {} --track {} --tls-disable-verify{} \
---key-id {} --aead-key {} --signing-private-seed {}",
+--key-id {} --aead-key {} --signing-public-key {}",
         shell_escape(&base.relay),
         shell_escape(&base.broadcast),
         shell_escape(track),
         if base.tls_disable_verify { "" } else { "" }, // still include flag only if set; kept simple below
         keys.key_id,
         shell_escape(&keys.aead_key_hex()),
-        shell_escape(&keys.signing_private_hex_seed()),
+        shell_escape(&keys.signing_verify_hex()),
     );
 
     if base.tls_disable_verify {
