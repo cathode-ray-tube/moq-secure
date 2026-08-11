@@ -19,6 +19,33 @@ pub(crate) fn sha256_digest(data: &[u8]) -> [u8; 32] {
         .expect("sha256 output is always 32 bytes")
 }
 
+fn split_ciphertext_and_tag(combined: &[u8]) -> (Vec<u8>, [u8; AEAD_TAG_LEN]) {
+    debug_assert!(combined.len() >= AEAD_TAG_LEN);
+    let ct_len = combined.len() - AEAD_TAG_LEN;
+
+    let ciphertext = combined[..ct_len].to_vec();
+
+    let mut tag = [0u8; AEAD_TAG_LEN];
+    tag.copy_from_slice(&combined[ct_len..]);
+    (ciphertext, tag)
+}
+
+fn combine_ciphertext_and_tag(ciphertext: &[u8], tag: &[u8; AEAD_TAG_LEN]) -> Vec<u8> {
+    let mut combined = Vec::with_capacity(ciphertext.len() + AEAD_TAG_LEN);
+    combined.extend_from_slice(ciphertext);
+    combined.extend_from_slice(tag);
+    combined
+}
+
+/// Encrypt with ChaCha20-Poly1305.
+///
+/// This returns:
+/// - ciphertext: the encrypted bytes (length == plaintext length)
+/// - tag: 16-byte Poly1305 authentication tag
+///
+/// Note: `aad` must exclude any signature bytes; it should be limited to what the
+/// frame spec requires (e.g., unencrypted header / associated data), and never the
+/// Ed25519 signature trailer.
 pub(crate) fn aead_encrypt(
     key: &[u8; 32],
     key_id: u8,
@@ -30,7 +57,6 @@ pub(crate) fn aead_encrypt(
     let nonce_bytes = derive_nonce12(key_id, ctr);
     let nonce = chacha20poly1305::Nonce::from_slice(&nonce_bytes);
 
-    // chacha20poly1305 returns ciphertext||tag (tag is last 16 bytes)
     let out = cipher
         .encrypt(
             nonce,
@@ -41,14 +67,15 @@ pub(crate) fn aead_encrypt(
         )
         .expect("encryption failure should be impossible");
 
-    let ct_len = out.len() - AEAD_TAG_LEN;
-    let ciphertext = out[..ct_len].to_vec();
-
-    let mut tag = [0u8; AEAD_TAG_LEN];
-    tag.copy_from_slice(&out[ct_len..]);
-    (ciphertext, tag)
+    split_ciphertext_and_tag(&out)
 }
 
+/// Decrypt with ChaCha20-Poly1305.
+///
+/// `ciphertext` must not include the tag; the `tag` is provided separately as 16 bytes.
+///
+/// Note: `aad` must exclude any signature bytes; it must match exactly the AAD
+/// used during encryption.
 pub(crate) fn aead_decrypt(
     key: &[u8; 32],
     key_id: u8,
@@ -61,9 +88,7 @@ pub(crate) fn aead_decrypt(
     let nonce_bytes = derive_nonce12(key_id, ctr);
     let nonce = chacha20poly1305::Nonce::from_slice(&nonce_bytes);
 
-    let mut combined = Vec::with_capacity(ciphertext.len() + AEAD_TAG_LEN);
-    combined.extend_from_slice(ciphertext);
-    combined.extend_from_slice(tag);
+    let combined = combine_ciphertext_and_tag(ciphertext, tag);
 
     cipher
         .decrypt(
