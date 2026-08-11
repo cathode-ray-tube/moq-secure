@@ -186,12 +186,8 @@ async fn main() -> Result<()> {
 
     // moq-native client config with TLS disable verify
     let mut client_cfg = moq_native::ClientConfig::default();
-    client_cfg.connect = url.parse().unwrap();
-    client_cfg.tls = moq_native::TlsConfig {
-        disable_cert_verify: cli.tls_disable_verify,
-        ..Default::default()
-    };
-
+    client_cfg.connect = Some(cli.relay.parse().context("invalid --relay url")?);
+    client_cfg.tls.disable_verify = Some(cli.tls_disable_verify);
     let client = client_cfg.init()?;
 
     let origin = Origin::random().produce();
