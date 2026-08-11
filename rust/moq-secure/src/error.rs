@@ -37,4 +37,7 @@ pub enum MoqSecureError {
 
     #[error("decryption failed")]
     DecryptFailed,
+
+    #[error("unknown or not-loaded key_id: {0}")]
+    InvalidKeyId(u8),
 }
