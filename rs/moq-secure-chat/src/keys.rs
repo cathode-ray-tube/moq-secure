@@ -72,7 +72,28 @@ impl ChatKeys {
             signing_verify,
         }
     }
+    
+    pub fn from_aead_and_signing_verify(
+        key_id: u8,
+        aead_key: [u8; 32],
+        signing_verify: ed25519_dalek::VerifyingKey,
+    ) -> Self {
+        // signing_private is never used by subscriber decrypt path,
+        // but ChatKeys struct requires it. We can generate a dummy.
+        use ed25519_dalek::SigningKey;
+        use rand::rngs::OsRng;
 
+        let signing_private = SigningKey::generate(&mut OsRng);
+        let signing_verify = signing_verify;
+
+        Self {
+            key_id,
+            aead_key,
+            signing_private,
+            signing_verify,
+        }
+    }
+    
     pub fn aead_key_hex(&self) -> String {
         hex::encode(self.aead_key)
     }
