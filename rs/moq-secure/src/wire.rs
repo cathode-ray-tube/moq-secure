@@ -1,7 +1,4 @@
-// wire.rs  (wire/frame implementation)
-//
-// This module implements the NEW per-frame wire format and signing/encryption logic.
-
+// wire.rs
 use crate::crypto::{aead_decrypt, aead_encrypt, sha256_digest};
 use crate::error::MoqSecureError;
 
@@ -13,7 +10,7 @@ pub const AEAD_TAG_LEN: usize = 16;
 
 pub const FIXED_HEADER_LEN: usize = 4 + 1 + 1 + 8 + 1 + 1 + 1 + 4; // 28
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WireHeader {
     pub magic: [u8; 4],
     pub version: u8,
@@ -58,15 +55,17 @@ impl WireHeader {
             return Err(MoqSecureError::UnsupportedVersion(self.version));
         }
         if self.sig_flag != 0 && self.sig_flag != 1 {
-            return Err(MoqSecureError::InvalidSignature);
+            return Err(MoqSecureError::InvalidSigFlag(self.sig_flag));
         }
         if self.encrypted != 0 && self.encrypted != 1 {
-            return Err(MoqSecureError::InvalidSignature);
+            return Err(MoqSecureError::InvalidEncryptedFlag(self.encrypted));
         }
+
         // If n_signed==0, then sig_flag must be 0 (signing disabled entirely).
         if self.n_signed == 0 && self.sig_flag != 0 {
             return Err(MoqSecureError::SigningMismatch);
         }
+
         Ok(())
     }
 
@@ -90,13 +89,13 @@ pub struct Frame {
 
 impl Frame {
     pub fn parse(frame: &[u8]) -> Result<Self, MoqSecureError> {
-        if frame.len() < FIXED_HEADER_LEN + AEAD_TAG_LEN {
-            // minimum could be smaller when encrypted==0 (no tag), but we’ll do stricter below
+        if frame.len() < FIXED_HEADER_LEN {
             return Err(MoqSecureError::TruncatedFrame);
         }
 
+        // We can’t know exact trailer length until after header fields are parsed,
+        // but we can parse header first.
         let (h_bytes, rest0) = frame.split_at(FIXED_HEADER_LEN);
-
         let mut idx = 0;
 
         let mut magic = [0u8; 4];
@@ -151,20 +150,22 @@ impl Frame {
             return Err(MoqSecureError::TruncatedFrame);
         }
 
-        let (payload_and_optional_tag, sig_opt) = if sig_len_on_wire == 0 {
+        let (payload_and_optional_tag, sig_opt_bytes) = if sig_len_on_wire == 0 {
             (rest0, None)
         } else {
-            let (p, s) = rest0.split_at(rest0.len() - SIG_SLOT_LEN);
+            let split_at = rest0.len() - SIG_SLOT_LEN;
+            let (p, s) = rest0.split_at(split_at);
             (p, Some(s))
         };
 
-        let signature = if let Some(sig_bytes) = sig_opt {
+        let signature = if let Some(sig_bytes) = sig_opt_bytes {
             if sig_bytes.len() != SIG_SLOT_LEN {
                 return Err(MoqSecureError::TruncatedFrame);
             }
             let mut sig = [0u8; SIG_SLOT_LEN];
             sig.copy_from_slice(sig_bytes);
-            // Optional strictness: non-zero signature when present
+
+            // Reject “zero signature” as invalid.
             if sig == [0u8; SIG_SLOT_LEN] {
                 return Err(MoqSecureError::InvalidSignature);
             }
@@ -177,13 +178,18 @@ impl Frame {
         };
 
         if header.encrypted == 1 {
+            // Need ciphertext + tag
             if payload_and_optional_tag.len() < AEAD_TAG_LEN {
                 return Err(MoqSecureError::CiphertextTooShort);
             }
-            let (ciphertext, tag_bytes) =
-                payload_and_optional_tag.split_at(payload_and_optional_tag.len() - AEAD_TAG_LEN);
 
-            let tag: [u8; AEAD_TAG_LEN] = tag_bytes.try_into().map_err(|_| MoqSecureError::CiphertextTooShort)?;
+            let (ciphertext, tag_bytes) = payload_and_optional_tag.split_at(
+                payload_and_optional_tag.len() - AEAD_TAG_LEN,
+            );
+
+            let tag: [u8; AEAD_TAG_LEN] = tag_bytes
+                .try_into()
+                .map_err(|_| MoqSecureError::CiphertextTooShort)?;
 
             Ok(Frame {
                 header,
@@ -202,22 +208,53 @@ impl Frame {
         }
     }
 
+    // Serialize to the exact byte layout expected by Frame::parse():
+    //   header bytes (FIXED_HEADER_LEN)
+    //   then:
+    //     if encrypted==1: payload (ciphertext) + tag (16)
+    //     if encrypted==0: payload (plaintext, padded)
+    //   then:
+    //     if sig_flag==1: 64-byte signature trailer
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+
+        // Header
+        out.extend_from_slice(&self.header.encode());
+
+        if self.header.encrypted == 1 {
+            out.extend_from_slice(&self.payload);
+            out.extend_from_slice(&self.tag);
+        } else {
+            out.extend_from_slice(&self.payload);
+        }
+
+        if self.header.sig_flag == 1 {
+            if let Some(sig) = self.signature {
+                out.extend_from_slice(&sig);
+            } else {
+                // Keeping behavior deterministic: if sig_flag says signature exists
+                // but it’s missing, serialize as a zero signature (parse/verify will fail).
+                out.extend_from_slice(&[0u8; SIG_SLOT_LEN]);
+            }
+        }
+
+        out
+    }
+
     pub fn aad_bytes(&self) -> Vec<u8> {
         self.header.aad()
     }
 
     // Signature preimage:
-    // sha256(header_wo_sigslot || (ciphertext||tag if encrypted==1 else plaintext) )
+    // sha256(header_wo_sigslot || (ciphertext||tag if encrypted==1 else plaintext))
     pub fn digest_for_signature(&self) -> [u8; 32] {
-        let header_bytes = self.header.encode(); // header without any signature bytes
+        let header_bytes = self.header.encode(); // includes sig_flag/encrypted/pad_len etc.
 
         if self.header.encrypted == 1 {
-            let mut v = Vec::with_capacity(
-                header_bytes.len() + self.payload.len() + AEAD_TAG_LEN,
-            );
+            let mut v = Vec::with_capacity(header_bytes.len() + self.payload.len() + AEAD_TAG_LEN);
             v.extend_from_slice(&header_bytes);
             v.extend_from_slice(&self.payload); // ciphertext
-            v.extend_from_slice(&self.tag);     // aead tag
+            v.extend_from_slice(&self.tag); // aead tag
             sha256_digest(&v)
         } else {
             let mut v = Vec::with_capacity(header_bytes.len() + self.payload.len());
@@ -227,16 +264,44 @@ impl Frame {
         }
     }
 
-    pub fn decode_plaintext(&self) -> Result<Vec<u8>, MoqSecureError> {
-        // First obtain "padded_plaintext"
-        let padded_plain = if self.header.encrypted == 1 {
+    // Strips padLen zeros and decrypts if encrypted==1.
+    pub fn decode_plaintext_with_keys_and_lease(
+        &self,
+        keys: &[[u8; 32]; 256],
+        broadcaster_public_key: &ed25519_dalek::VerifyingKey,
+        lease_remaining: &mut u8,
+    ) -> Result<Vec<u8>, MoqSecureError> {
+        // Lease/signing gating, matching your decrypt_frame() behavior.
+        if self.header.n_signed == 0 {
+            if self.header.sig_flag != 0 || self.signature.is_some() {
+                return Err(MoqSecureError::SigningMismatch);
+            }
+        } else {
+            if self.header.sig_flag == 1 {
+                let sig_bytes = self.signature.ok_or(MoqSecureError::InvalidSignature)?;
+                let digest = self.digest_for_signature();
+                let sig = ed25519_dalek::Signature::from_bytes(&sig_bytes)
+                    .map_err(|_| MoqSecureError::InvalidSignature)?;
+                broadcaster_public_key
+                    .verify(&digest, &sig)
+                    .map_err(|_| MoqSecureError::InvalidSignature)?;
+                *lease_remaining = self.header.n_signed;
+            } else {
+                // sig_flag == 0, so this frame is unsigned; only allowed if lease_remaining > 0.
+                if *lease_remaining == 0 {
+                    return Err(MoqSecureError::InvalidSignature);
+                }
+                *lease_remaining -= 1;
+            }
+        }
+
+        let padded_plaintext = if self.header.encrypted == 1 {
             aead_decrypt(
-                // key
-                &crate::crypto_key_table()[self.header.key_id as usize],
+                &keys[self.header.key_id as usize],
                 self.header.key_id,
                 self.header.ctr,
-                &self.header.aad(),
-                &self.payload,      // ciphertext
+                &self.aad_bytes(),
+                &self.payload,
                 &self.tag,
             )?
         } else {
@@ -244,14 +309,13 @@ impl Frame {
         };
 
         let pad_len = self.header.pad_len_usize();
-        if padded_plain.len() < pad_len {
+        if padded_plaintext.len() < pad_len {
             return Err(MoqSecureError::AeadAuthFailed);
         }
 
-        Ok(padded_plain[pad_len..].to_vec())
+        Ok(padded_plaintext[pad_len..].to_vec())
     }
 }
-
 
 pub fn encrypt_frame(
     keys: &[[u8; 32]; 256],
@@ -267,7 +331,7 @@ pub fn encrypt_frame(
     use ed25519_dalek::Signer;
 
     if encrypted != 0 && encrypted != 1 {
-        return Err(MoqSecureError::InvalidSignature);
+        return Err(MoqSecureError::InvalidEncryptedFlag(encrypted));
     }
 
     let sig_flag = if n_signed == 0 {
@@ -355,56 +419,9 @@ pub fn encrypt_frame(
 pub fn decrypt_frame(
     keys: &[[u8; 32]; 256],
     broadcaster_public_key: &ed25519_dalek::VerifyingKey,
-    mut lease_remaining: &mut u8,
+    lease_remaining: &mut u8,
     frame_bytes: &[u8],
 ) -> Result<Vec<u8>, MoqSecureError> {
-    use ed25519_dalek::Verifier;
-
     let frame = Frame::parse(frame_bytes)?;
-
-    // Lease/signing gating (your existing logic)
-    if frame.header.n_signed == 0 {
-        if frame.header.sig_flag != 0 || frame.signature.is_some() {
-            return Err(MoqSecureError::SigningMismatch);
-        }
-    } else {
-        if frame.header.sig_flag == 1 {
-            let sig_bytes = frame.signature.ok_or(MoqSecureError::InvalidSignature)?;
-            let digest = frame.digest_for_signature();
-            let sig = ed25519_dalek::Signature::from_bytes(&sig_bytes)
-                .map_err(|_| MoqSecureError::InvalidSignature)?;
-            broadcaster_public_key
-                .verify(&digest, &sig)
-                .map_err(|_| MoqSecureError::InvalidSignature)?;
-
-            *lease_remaining = frame.header.n_signed;
-        } else {
-            if *lease_remaining == 0 {
-                return Err(MoqSecureError::InvalidSignature);
-            }
-            *lease_remaining -= 1;
-        }
-    }
-
-    // Decrypt/pass-through to get padded_plaintext
-    let padded_plaintext = if frame.header.encrypted == 1 {
-        aead_decrypt(
-            &keys[frame.header.key_id as usize],
-            frame.header.key_id,
-            frame.header.ctr,
-            &frame.aad_bytes(),
-            &frame.payload,
-            &frame.tag,
-        )?
-    } else {
-        frame.payload.clone()
-    };
-
-    // Strip padLen zero prefix
-    let pad_len = frame.header.pad_len_usize();
-    if padded_plaintext.len() < pad_len {
-        return Err(MoqSecureError::AeadAuthFailed);
-    }
-
-    Ok(padded_plaintext[pad_len..].to_vec())
+    frame.decode_plaintext_with_keys_and_lease(keys, broadcaster_public_key, lease_remaining)
 }
