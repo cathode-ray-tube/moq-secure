@@ -34,11 +34,11 @@ struct Cli {
     /// Ed25519 private key seed (preferred) as hex or base64; CLI prints this in hex.
     #[arg(long)]
     signing_private_seed: Option<String>,
-
-    /// Subscriber: verify public key as hex or base64 (seed is not needed for verification).
-    /// If omitted, CLI will derive verify from signing_private_seed (publisher mode prints seed).
+ 
+    /// Ed25519 signing public verify key (32 bytes) as hex or base64.
+    /// Needed only in subscribe mode.
     #[arg(long)]
-    verify_public_key: Option<String>,
+    signing_public_key: Option<String>,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -119,41 +119,68 @@ async fn main() -> Result<()> {
 
     // Keys
     let keys = match cli.role {
-        Role::Publish { .. } => {
-            // If user provided overrides, use them; otherwise generate.
-            if let (Some(key_id), Some(aead_key), Some(signing_seed)) =
-                (cli.key_id, cli.aead_key.clone(), cli.signing_private_seed.clone())
-            {
-                ChatKeys::from_strings(key_id, &aead_key, &signing_seed)
-                    .context("failed to construct ChatKeys from provided values")?
-            } else {
-                // generate defaults
-                let key_id = cli.key_id;
-                ChatKeys::generate(key_id).context("failed to generate ChatKeys")?
-            }
-        }
-        Role::Subscribe => {
-            // Subscriber must have aead key and a signing private seed (so we can reuse ChatKeys::decrypt_frame path).
-            // (If you want, we can add a mode that uses only verify public key + aead key.)
-            let key_id = cli.key_id.context("--key-id is required in subscribe mode")?;
-            let aead_key = cli.aead_key.context("--aead-key is required in subscribe mode")?;
-            let signing_seed = cli
-                .signing_private_seed
-                .as_ref()
-                .or_else(|| cli.verify_public_key.as_ref())
-                .cloned()
-                .context("provide --signing-private-seed (preferred) or extend CLI to support verify-only")?;
-
-            // If user passed verify_public_key, we still need the private seed for this library wiring.
-            // So we require signing_private_seed for now.
-            if cli.signing_private_seed.is_none() {
-                anyhow::bail!("This CLI currently requires --signing-private-seed in subscribe mode (seed is used to derive verify key for MoqSecure decrypt_frame)");
-            }
-
+    Role::Publish { .. } => {
+        if let (Some(key_id), Some(aead_key), Some(signing_seed)) =
+            (cli.key_id, cli.aead_key.clone(), cli.signing_private_seed.clone())
+        {
             ChatKeys::from_strings(key_id, &aead_key, &signing_seed)
                 .context("failed to construct ChatKeys from provided values")?
+        } else {
+            ChatKeys::generate(cli.key_id).context("failed to generate ChatKeys")?
         }
-    };
+    }
+    Role::Subscribe => {
+        let key_id = cli.key_id.context("--key-id is required in subscribe mode")?;
+        let aead_key = cli.aead_key.context("--aead-key is required in subscribe mode")?;
+        let signing_public = cli
+            .signing_public_key
+            .context("--signing-public-key is required in subscribe mode")?;
+
+        // Build ChatKeys using aead key + verify key
+        // (we decode both using the same helper approach as from_strings)
+        // Reuse from_strings for aead decoding by giving a dummy signing_private_seed,
+        // or decode directly. We'll decode directly here:
+
+        let aead_decoded = {
+            let t = aead_key.trim();
+            let is_hex = t.len() == 64 && t.chars().all(|c| c.is_ascii_hexdigit());
+            let v = if is_hex {
+                hex::decode(t).map_err(|e| anyhow::anyhow!(e))?
+            } else {
+                base64::engine::general_purpose::STANDARD
+                    .decode(t)
+                    .or_else(|_| base64::engine::general_purpose::STANDARD_NO_PAD.decode(t))
+                    .map_err(|e| anyhow::anyhow!(e))?
+            };
+            if v.len() != 32 {
+                anyhow::bail!("aead key must decode to exactly 32 bytes");
+            }
+            v.try_into().unwrap()
+        };
+
+        let verify_decoded = {
+            let t = signing_public.trim();
+            let is_hex = t.len() == 64 && t.chars().all(|c| c.is_ascii_hexdigit());
+            let v = if is_hex {
+                hex::decode(t).map_err(|e| anyhow::anyhow!(e))?
+            } else {
+                base64::engine::general_purpose::STANDARD
+                    .decode(t)
+                    .or_else(|_| base64::engine::general_purpose::STANDARD_NO_PAD.decode(t))
+                    .map_err(|e| anyhow::anyhow!(e))?
+            };
+            if v.len() != 32 {
+                anyhow::bail!("signing public key must decode to exactly 32 bytes");
+            }
+            v.try_into().unwrap()
+        };
+
+        let signing_verify = ed25519_dalek::VerifyingKey::from_bytes(&verify_decoded)
+            .map_err(|e| anyhow::anyhow!("invalid verify key: {e}"))?;
+
+        ChatKeys::from_aead_and_signing_verify(key_id, aead_decoded, signing_verify)
+    }
+};
 
     let url = cli.relay.clone();
 
