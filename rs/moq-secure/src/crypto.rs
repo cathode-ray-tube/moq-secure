@@ -1,4 +1,4 @@
-// rust/moq-secure/src/crypto.rs
+// crypto.rs
 
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{ChaCha20Poly1305, Key};

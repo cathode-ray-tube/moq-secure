@@ -1,4 +1,4 @@
-// rust/moq-secure/src/key_store.rs
+// key_store.rs
 
 pub trait KeyStore {
     fn aead_key(&self, key_id: u8) -> Option<&[u8; 32]>;
