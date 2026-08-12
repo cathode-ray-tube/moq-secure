@@ -111,20 +111,19 @@ impl ChatKeys {
     }
 
     pub fn verify_from_hex(verify_hex: &str) -> Result<VerifyingKey, ChatKeysError> {
-        let bytes = hex::decode(verify_hex).map_err(|e| ChatKeysError::DecodeFailed(e.to_string()))?;
-        if bytes.len() != 32 {
-            return Err(ChatKeysError::SigningKeyWrongLen { decoded_len: bytes.len() });
-        }
-
-        let arr: [u8; 32] = bytes.try_into().map_err(|_| {
-            ChatKeysError::SigningKeyInvalid("verifying key conversion failed".into())
-        })?;
-
-        // Like SigningKey::from_bytes, this may or may not be Result in your build.
-        // We'll try to match the likely signature: VerifyingKey::from_bytes(&arr) -> VerifyingKey
-        // If you hit a compile error here, paste it and I’ll adjust.
-        Ok(VerifyingKey::from_bytes(&arr))
+    let bytes = hex::decode(verify_hex).map_err(|e| ChatKeysError::DecodeFailed(e.to_string()))?;
+    if bytes.len() != 32 {
+        return Err(ChatKeysError::SigningKeyWrongLen { decoded_len: bytes.len() });
     }
+
+    let arr: [u8; 32] = bytes.try_into().map_err(|_| {
+        ChatKeysError::SigningKeyInvalid("verifying key conversion failed".into())
+    })?;
+
+    VerifyingKey::from_bytes(&arr).map_err(|e| {
+        ChatKeysError::SigningKeyInvalid(format!("invalid verifying key: {e}"))
+    })
+}
 
     // --- AEAD encoding helpers ---
 
