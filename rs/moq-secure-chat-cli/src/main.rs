@@ -1,7 +1,10 @@
 use anyhow::{Context, Result};
+use base64::Engine;
 use clap::{Parser, Subcommand};
 use moq_net::{Origin, Path};
 use moq_secure_chat::{ChatKeys, ChatPublisher, ChatSubscriber};
+use rand::RngCore;
+use url::Url;
 
 #[derive(Parser, Debug, Clone)]
 struct Cli {
@@ -32,11 +35,12 @@ struct Cli {
     aead_key: Option<String>,
 
     /// Ed25519 private key seed (preferred) as hex or base64; CLI prints this in hex.
+    /// NOTE: required in both publish and subscribe for this current ChatKeys API.
     #[arg(long)]
     signing_private_seed: Option<String>,
- 
+
     /// Ed25519 signing public verify key (32 bytes) as hex or base64.
-    /// Needed only in subscribe mode.
+    /// Accepts but not required with current ChatKeys API (private is needed to decrypt/sign).
     #[arg(long)]
     signing_public_key: Option<String>,
 }
@@ -59,47 +63,7 @@ fn random_track_hex() -> String {
     hex::encode(b)
 }
 
-fn build_subscribe_command(base: &Cli, track: &str, keys: &ChatKeys) -> String {
-    let cmd = format!(
-        "moq-secure-chat-cli --relay {} --broadcast {} --track {} --tls-disable-verify{} \
---key-id {} --aead-key {} --signing-public-key {}",
-        shell_escape(&base.relay),
-        shell_escape(&base.broadcast),
-        shell_escape(track),
-        if base.tls_disable_verify { "" } else { "" }, // still include flag only if set; kept simple below
-        keys.key_id,
-        shell_escape(&keys.aead_key_hex()),
-        shell_escape(&keys.signing_verify_hex()),
-    );
-
-    if base.tls_disable_verify {
-        // above didn't include flag string; fix:
-        format!(
-            "moq-secure-chat-cli --relay {} --broadcast {} --track {} --tls-disable-verify \
---role subscribe --key-id {} --aead-key {} --signing-private-seed {}",
-            shell_escape(&base.relay),
-            shell_escape(&base.broadcast),
-            shell_escape(track),
-            keys.key_id,
-            shell_escape(&keys.aead_key_hex()),
-            shell_escape(&keys.signing_private_hex_seed()),
-        )
-    } else {
-        format!(
-            "moq-secure-chat-cli --relay {} --broadcast {} --track {} \
---role subscribe --key-id {} --aead-key {} --signing-private-seed {}",
-            shell_escape(&base.relay),
-            shell_escape(&base.broadcast),
-            shell_escape(track),
-            keys.key_id,
-            shell_escape(&keys.aead_key_hex()),
-            shell_escape(&keys.signing_private_hex_seed()),
-        )
-    }
-}
-
 fn shell_escape(s: &str) -> String {
-    // Minimal escaping for copy/paste.
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
@@ -117,76 +81,24 @@ async fn main() -> Result<()> {
         (Role::Subscribe, None) => anyhow::bail!("--track is required for subscribe mode"),
     };
 
-    // Keys
-    let keys = match cli.role {
-    Role::Publish { .. } => {
-        if let (Some(key_id), Some(aead_key), Some(signing_seed)) =
-            (cli.key_id, cli.aead_key.clone(), cli.signing_private_seed.clone())
-        {
-            ChatKeys::from_strings(key_id, &aead_key, &signing_seed)
-                .context("failed to construct ChatKeys from provided values")?
-        } else {
-            ChatKeys::generate(cli.key_id).context("failed to generate ChatKeys")?
-        }
-    }
-    Role::Subscribe => {
-        let key_id = cli.key_id.context("--key-id is required in subscribe mode")?;
-        let aead_key = cli.aead_key.context("--aead-key is required in subscribe mode")?;
-        let signing_public = cli
-            .signing_public_key
-            .context("--signing-public-key is required in subscribe mode")?;
+    // Keys: with your ChatKeys API, we can only construct from_strings(key_id, aead_key, signing_private_seed_or_bytes_str)
+    let key_id = cli.key_id.context("--key-id is required")?;
+    let aead_key = cli.aead_key.context("--aead-key is required")?;
+    let signing_private = cli
+        .signing_private_seed
+        .context("--signing-private-seed is required")?;
 
-        // Build ChatKeys using aead key + verify key
-        // (we decode both using the same helper approach as from_strings)
-        // Reuse from_strings for aead decoding by giving a dummy signing_private_seed,
-        // or decode directly. We'll decode directly here:
-
-        let aead_decoded = {
-            let t = aead_key.trim();
-            let is_hex = t.len() == 64 && t.chars().all(|c| c.is_ascii_hexdigit());
-            let v = if is_hex {
-                hex::decode(t).map_err(|e| anyhow::anyhow!(e))?
-            } else {
-                base64::engine::general_purpose::STANDARD
-                    .decode(t)
-                    .or_else(|_| base64::engine::general_purpose::STANDARD_NO_PAD.decode(t))
-                    .map_err(|e| anyhow::anyhow!(e))?
-            };
-            if v.len() != 32 {
-                anyhow::bail!("aead key must decode to exactly 32 bytes");
-            }
-            v.try_into().unwrap()
-        };
-
-        let verify_decoded = {
-            let t = signing_public.trim();
-            let is_hex = t.len() == 64 && t.chars().all(|c| c.is_ascii_hexdigit());
-            let v = if is_hex {
-                hex::decode(t).map_err(|e| anyhow::anyhow!(e))?
-            } else {
-                base64::engine::general_purpose::STANDARD
-                    .decode(t)
-                    .or_else(|_| base64::engine::general_purpose::STANDARD_NO_PAD.decode(t))
-                    .map_err(|e| anyhow::anyhow!(e))?
-            };
-            if v.len() != 32 {
-                anyhow::bail!("signing public key must decode to exactly 32 bytes");
-            }
-            v.try_into().unwrap()
-        };
-
-        let signing_verify = ed25519_dalek::VerifyingKey::from_bytes(&verify_decoded)
-            .map_err(|e| anyhow::anyhow!("invalid verify key: {e}"))?;
-
-        ChatKeys::from_aead_and_signing_verify(key_id, aead_decoded, signing_verify)
-    }
-};
-
-    let url = cli.relay.clone();
+    let keys = ChatKeys::from_strings(key_id, &aead_key, &signing_private)
+        .context("failed to construct ChatKeys from provided values")?;
 
     // moq-native client config with TLS disable verify
+    let relay_url: Url = cli
+        .relay
+        .parse()
+        .context("invalid --relay url (expected a URL like moq://host:port or similar)")?;
+
     let mut client_cfg = moq_native::ClientConfig::default();
-    client_cfg.connect = Some(cli.relay.parse().context("invalid --relay url")?);
+    client_cfg.connect = Some(relay_url.clone());
     client_cfg.tls.disable_verify = Some(cli.tls_disable_verify);
     let client = client_cfg.init()?;
 
@@ -200,6 +112,7 @@ async fn main() -> Result<()> {
                     moq_net::broadcast::Route::new().with_announce(true),
                 )
                 .context("failed to create broadcast")?;
+
             let track_producer = broadcast
                 .create_track(track.clone(), None)
                 .context("failed to create track")?;
@@ -209,32 +122,34 @@ async fn main() -> Result<()> {
                 format!(
                     "moq-secure-chat-cli --relay {} --broadcast {} --track {} --tls-disable-verify --role subscribe \
 --key-id {} --aead-key {} --signing-private-seed {}",
-                    cli.relay,
-                    cli.broadcast,
-                    track,
+                    shell_escape(&cli.relay),
+                    shell_escape(&cli.broadcast),
+                    shell_escape(&track),
                     keys.key_id,
-                    keys.aead_key_hex(),
-                    keys.signing_private_hex_seed()
+                    shell_escape(&keys.aead_key_hex()),
+                    shell_escape(&keys.signing_private_as_hex(true))
                 )
             } else {
                 format!(
                     "moq-secure-chat-cli --relay {} --broadcast {} --track {} --role subscribe \
 --key-id {} --aead-key {} --signing-private-seed {}",
-                    cli.relay,
-                    cli.broadcast,
-                    track,
+                    shell_escape(&cli.relay),
+                    shell_escape(&cli.broadcast),
+                    shell_escape(&track),
                     keys.key_id,
-                    keys.aead_key_hex(),
-                    keys.signing_private_hex_seed()
+                    shell_escape(&keys.aead_key_hex()),
+                    shell_escape(&keys.signing_private_as_hex(true))
                 )
             };
 
             println!("=== Copy/paste subscribe command (run in another terminal) ===");
-            println!("{}", subscribe_cmd);
+            println!("{subscribe_cmd}");
 
             let mut publisher = ChatPublisher::new(track_producer, keys);
 
-            let reconnect = client.with_publisher(&origin).reconnect(cli.relay.clone());
+            let reconnect = client
+                .with_publisher(&origin)
+                .reconnect(relay_url);
 
             let result = tokio::select! {
                 res = reconnect.closed() => res.map_err(Into::into),
@@ -252,29 +167,37 @@ async fn main() -> Result<()> {
                         }
                     }
                     Ok::<(), anyhow::Error>(())
-                } => Ok(()),
+                } => Ok(())
             };
 
             broadcast.finish();
             result
         }
+
         Role::Subscribe => {
-            let reconnect = client.with_subscriber(origin.clone()).reconnect(cli.relay.clone());
+            let reconnect = client
+                .with_subscriber(origin.clone())
+                .reconnect(relay_url);
 
             let path: Path<'_> = cli.broadcast.as_str().into();
+
             let mut origin = origin
                 .scope(&[path])
                 .context("not allowed to consume broadcast")?
                 .consume()
                 .announced();
 
-            tracing::info!(broadcast = %cli.broadcast, track = %track, "waiting for broadcast to be online");
+            tracing::info!(
+                broadcast = %cli.broadcast,
+                track = %track,
+                "waiting for broadcast to be online"
+            );
 
             let mut sub: Option<moq_net::track::Subscriber> = None;
 
             loop {
                 tokio::select! {
-                    Some(moq_net::announce::Update { path, broadcast }) = origin.next() => match broadcast {
+                    Some(moq_net::announce::Update { path: _path, broadcast }) = origin.next() => match broadcast {
                         Some(b) => {
                             tracing::info!("broadcast is online, subscribing to track");
                             let track_sub = b.track(&track)?.subscribe(None).await?;
@@ -285,16 +208,18 @@ async fn main() -> Result<()> {
                         }
                     },
                     res = reconnect.closed() => return Ok(res?),
-                    Some(_) = async { sub.is_some() } => {
+                    true = async { sub.is_some() } => {
                         let track_sub = sub.take().unwrap();
                         let subscriber = ChatSubscriber::new(track_sub, keys.clone());
-                        subscriber.run(|pt| {
-                            if let Ok(s) = String::from_utf8(pt.clone()) {
-                                println!("{}", s);
-                            } else {
-                                eprintln!("(non-utf8 message) {} bytes", pt.len());
-                            }
-                        }).await?;
+                        subscriber
+                            .run(|pt| {
+                                if let Ok(s) = String::from_utf8(pt.clone()) {
+                                    println!("{}", s);
+                                } else {
+                                    eprintln!("(non-utf8 message) {} bytes", pt.len());
+                                }
+                            })
+                            .await?;
                     }
                 }
             }
