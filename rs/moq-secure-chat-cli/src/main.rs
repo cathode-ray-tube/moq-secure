@@ -136,10 +136,9 @@ async fn main() -> Result<()> {
                 .context("failed to create track")?;
 
             // Print copy-pastable subscribe command.
-            // Subscribe mode now accepts ONLY --signing-public-key (plus transport args).
             let subscribe_cmd = if cli.tls_disable_verify {
                 format!(
-                    "moq-secure-chat-cli --relay {} --broadcast {} --track {} --tls-disable-verify --role subscribe \
+                    "moq-secure-chat-cli --relay {} --broadcast {} --track {} --tls-disable-verify subscribe \
 --key-id {} --aead-key {} --signing-public-key {}",
                     shell_escape(&cli.relay),
                     shell_escape(&cli.broadcast),
@@ -150,7 +149,7 @@ async fn main() -> Result<()> {
                 )
             } else {
                 format!(
-                    "moq-secure-chat-cli --relay {} --broadcast {} --track {} --role subscribe \
+                    "moq-secure-chat-cli --relay {} --broadcast {} --track {} subscribe \
 --key-id {} --aead-key {} --signing-public-key {}",
                     shell_escape(&cli.relay),
                     shell_escape(&cli.broadcast),
@@ -194,12 +193,11 @@ async fn main() -> Result<()> {
         }
 
         Role::Subscribe => {
-            // Subscribe needs signing public verify key (cannot be derived without private key).
             let signing_public = cli
                 .signing_public_key
                 .context("--signing-public-key is required for subscribe mode")?;
 
-            // Construct ChatKeys using the public-verify constructor (dummy private inside).
+            // Construct ChatKeys using the public-verify constructor.
             let keys = ChatKeys::from_strings_public_verify(key_id, &aead_key, &signing_public)
                 .context("failed to construct ChatKeys (public-verify)")?;
 
