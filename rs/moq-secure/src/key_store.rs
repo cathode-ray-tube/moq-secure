@@ -77,8 +77,10 @@ impl InMemoryKeyStore {
 
         // Otherwise, try base64.
         let decoded = base64::engine::general_purpose::STANDARD
-            .decode(key_encoded)
-            .or_else(|_| base64::engine::general_purpose::STANDARD_NO_PAD.decode(key_encoded))?;
+    .decode(key_encoded)
+    .or_else(|_| base64::engine::general_purpose::STANDARD_NO_PAD.decode(key_encoded))
+    .map_err(DecodeFailed::from)?;
+
 
         if decoded.len() != 32 {
             return Err(KeyStoreError::KeyWrongLength(decoded.len()));
