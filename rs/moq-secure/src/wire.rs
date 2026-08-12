@@ -1,6 +1,7 @@
 // wire.rs
 use crate::crypto::{aead_decrypt, aead_encrypt, sha256_digest};
 use crate::error::MoqSecureError;
+use ed25519_dalek::Verifier;
 
 pub const MAGIC: [u8; 4] = *b"MOQS";
 pub const VERSION: u8 = 1;
