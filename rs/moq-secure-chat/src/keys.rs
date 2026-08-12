@@ -3,6 +3,7 @@ use moq_secure::MoqSecureError;
 use rand::rngs::OsRng;
 use rand::RngCore;
 use thiserror::Error;
+use base64::Engine;
 
 #[derive(Debug, Error)]
 pub enum ChatKeysError {
