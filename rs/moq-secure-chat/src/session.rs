@@ -27,7 +27,7 @@ impl ChatSession {
 }
 
 /// Publisher publishes each chat message as one MoQ group containing one frame.
-// This is the “easy mapping”: 1 chat msg == 1 group with one object.
+/// This is the “easy mapping”: 1 chat msg == 1 group with one object.
 pub struct ChatPublisher {
     pub keys: ChatKeys,
     pub track: moq_net::track::Producer,
