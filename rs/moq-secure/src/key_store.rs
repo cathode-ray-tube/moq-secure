@@ -1,5 +1,7 @@
 // key_store.rs
 
+use base64::Engine;
+
 pub trait KeyStore {
     fn aead_key(&self, key_id: u8) -> Option<&[u8; 32]>;
 }
@@ -66,7 +68,7 @@ impl InMemoryKeyStore {
         // Try hex only if it has the exact expected length.
         // (This avoids accidentally treating arbitrary base64 as hex.)
         if key_encoded.len() == 64 && key_encoded.chars().all(|c| c.is_ascii_hexdigit()) {
-            let bytes = hex::decode(key_encoded)?; // will be 32 bytes
+            let bytes = hex::decode(key_encoded).map_err(DecodeFailed::from)?;
             let key = <[u8; 32]>::try_from(bytes.as_slice())
                 .map_err(|_| KeyStoreError::KeyWrongLength(bytes.len()))?;
             self.set_key(key_id, key);
