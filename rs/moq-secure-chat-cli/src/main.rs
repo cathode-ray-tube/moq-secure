@@ -26,7 +26,7 @@ struct Cli {
     #[command(subcommand)]
     role: Role,
 
-    /// Optional overrides for keys (accept hex or base64)
+    /// Optional overrides for keys (accept hex or base64 for aead key)
     #[arg(long)]
     key_id: Option<u8>,
 
@@ -34,7 +34,7 @@ struct Cli {
     aead_key: Option<String>,
 
     /// Ed25519 private key seed (preferred) as hex or base64.
-    /// Required in publish mode. In subscribe mode this is not required.
+    /// Optional: if omitted, publish will generate one and print copy/paste subscribe args.
     #[arg(long)]
     signing_private_seed: Option<String>,
 
@@ -66,6 +66,22 @@ fn shell_escape(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
+fn gen_key_id() -> u8 {
+    rand::random()
+}
+
+fn gen_aead_key_hex() -> String {
+    let mut b = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut b);
+    hex::encode(b)
+}
+
+fn gen_signing_private_seed_hex() -> String {
+    let mut seed = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut seed);
+    hex::encode(seed)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
@@ -80,9 +96,9 @@ async fn main() -> Result<()> {
         (Role::Subscribe, None) => anyhow::bail!("--track is required for subscribe mode"),
     };
 
-    // Keys: key_id + aead_key are required in both roles.
-    let key_id = cli.key_id.context("--key-id is required")?;
-    let aead_key = cli.aead_key.context("--aead-key is required")?;
+    // Keys: generate defaults when not supplied (publish-focused behavior).
+    let key_id: u8 = cli.key_id.unwrap_or_else(gen_key_id);
+    let aead_key: String = cli.aead_key.unwrap_or_else(gen_aead_key_hex);
 
     // moq-native client config with TLS disable verify
     let relay_url: Url = cli
@@ -99,13 +115,14 @@ async fn main() -> Result<()> {
 
     match cli.role {
         Role::Publish { message } => {
-            // Publish needs signing private
-            let signing_private = cli
+            // Publish needs signing private seed for ChatKeys::from_strings.
+            // If not provided, generate one.
+            let signing_private_seed_or_bytes = cli
                 .signing_private_seed
-                .context("--signing-private-seed is required for publish mode")?;
+                .unwrap_or_else(gen_signing_private_seed_hex);
 
-            let keys = ChatKeys::from_strings(key_id, &aead_key, &signing_private)
-                .context("failed to construct ChatKeys from provided values")?;
+            let keys = ChatKeys::from_strings(key_id, &aead_key, &signing_private_seed_or_bytes)
+                .context("failed to construct ChatKeys from provided/generated values")?;
 
             let mut broadcast = origin
                 .create_broadcast(
@@ -119,7 +136,7 @@ async fn main() -> Result<()> {
                 .context("failed to create track")?;
 
             // Print copy-pastable subscribe command.
-            // Subscribe mode now accepts ONLY --signing-public-key.
+            // Subscribe mode now accepts ONLY --signing-public-key (plus transport args).
             let subscribe_cmd = if cli.tls_disable_verify {
                 format!(
                     "moq-secure-chat-cli --relay {} --broadcast {} --track {} --tls-disable-verify --role subscribe \
@@ -177,12 +194,12 @@ async fn main() -> Result<()> {
         }
 
         Role::Subscribe => {
-            // Subscribe needs signing public verify key
+            // Subscribe needs signing public verify key (cannot be derived without private key).
             let signing_public = cli
                 .signing_public_key
                 .context("--signing-public-key is required for subscribe mode")?;
 
-            // Construct ChatKeys using the public-verify constructor (dummy private inside)
+            // Construct ChatKeys using the public-verify constructor (dummy private inside).
             let keys = ChatKeys::from_strings_public_verify(key_id, &aead_key, &signing_public)
                 .context("failed to construct ChatKeys (public-verify)")?;
 
