@@ -80,19 +80,18 @@ impl InMemoryKeyStore {
     .decode(key_encoded)
     .or_else(|_| base64::engine::general_purpose::STANDARD_NO_PAD.decode(key_encoded))
     .map_err(DecodeFailed::from)?;
+if decoded.len() != 32 {
+    return Err(KeyStoreError::KeyWrongLength(decoded.len()));
+}
 
+let decoded_len = decoded.len();
+let key: [u8; 32] = decoded
+    .try_into()
+    .map_err(|_| KeyStoreError::KeyWrongLength(decoded_len))?;
 
-        if decoded.len() != 32 {
-            return Err(KeyStoreError::KeyWrongLength(decoded.len()));
-        }
+self.set_key(key_id, key);
+Ok(())
 
-        let key: [u8; 32] = decoded
-            .try_into()
-            .map_err(|_| KeyStoreError::KeyWrongLength(decoded.len()))?;
-
-        self.set_key(key_id, key);
-        Ok(())
-    }
 }
 
 impl KeyStore for InMemoryKeyStore {
