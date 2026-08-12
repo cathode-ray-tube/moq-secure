@@ -281,11 +281,11 @@ impl Frame {
             if self.header.sig_flag == 1 {
                 let sig_bytes = self.signature.ok_or(MoqSecureError::InvalidSignature)?;
                 let digest = self.digest_for_signature();
-                let sig = ed25519_dalek::Signature::from_bytes(&sig_bytes)
-                    .map_err(|_| MoqSecureError::InvalidSignature)?;
-                broadcaster_public_key
+                 let sig = ed25519_dalek::Signature::from_bytes(&sig_bytes);
+                   broadcaster_public_key
                     .verify(&digest, &sig)
                     .map_err(|_| MoqSecureError::InvalidSignature)?;
+
                 *lease_remaining = self.header.n_signed;
             } else {
                 // sig_flag == 0, so this frame is unsigned; only allowed if lease_remaining > 0.
