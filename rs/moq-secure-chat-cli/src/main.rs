@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use base64::Engine;
 use clap::{Parser, Subcommand};
 use moq_net::{Origin, Path};
 use moq_secure_chat::{ChatKeys, ChatPublisher, ChatSubscriber};
