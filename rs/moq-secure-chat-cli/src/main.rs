@@ -34,13 +34,13 @@ struct Cli {
     #[arg(long)]
     aead_key: Option<String>,
 
-    /// Ed25519 private key seed (preferred) as hex or base64; CLI prints this in hex.
-    /// NOTE: required in both publish and subscribe for this current ChatKeys API.
+    /// Ed25519 private key seed (preferred) as hex or base64.
+    /// Required in publish mode. In subscribe mode this is not required.
     #[arg(long)]
     signing_private_seed: Option<String>,
 
     /// Ed25519 signing public verify key (32 bytes) as hex or base64.
-    /// Accepts but not required with current ChatKeys API (private is needed to decrypt/sign).
+    /// Required in subscribe mode.
     #[arg(long)]
     signing_public_key: Option<String>,
 }
@@ -81,15 +81,9 @@ async fn main() -> Result<()> {
         (Role::Subscribe, None) => anyhow::bail!("--track is required for subscribe mode"),
     };
 
-    // Keys: with your ChatKeys API, we can only construct from_strings(key_id, aead_key, signing_private_seed_or_bytes_str)
+    // Keys: key_id + aead_key are required in both roles.
     let key_id = cli.key_id.context("--key-id is required")?;
     let aead_key = cli.aead_key.context("--aead-key is required")?;
-    let signing_private = cli
-        .signing_private_seed
-        .context("--signing-private-seed is required")?;
-
-    let keys = ChatKeys::from_strings(key_id, &aead_key, &signing_private)
-        .context("failed to construct ChatKeys from provided values")?;
 
     // moq-native client config with TLS disable verify
     let relay_url: Url = cli
@@ -106,6 +100,14 @@ async fn main() -> Result<()> {
 
     match cli.role {
         Role::Publish { message } => {
+            // Publish needs signing private
+            let signing_private = cli
+                .signing_private_seed
+                .context("--signing-private-seed is required for publish mode")?;
+
+            let keys = ChatKeys::from_strings(key_id, &aead_key, &signing_private)
+                .context("failed to construct ChatKeys from provided values")?;
+
             let mut broadcast = origin
                 .create_broadcast(
                     &cli.broadcast,
@@ -118,27 +120,28 @@ async fn main() -> Result<()> {
                 .context("failed to create track")?;
 
             // Print copy-pastable subscribe command.
+            // Subscribe mode now accepts ONLY --signing-public-key.
             let subscribe_cmd = if cli.tls_disable_verify {
                 format!(
                     "moq-secure-chat-cli --relay {} --broadcast {} --track {} --tls-disable-verify --role subscribe \
---key-id {} --aead-key {} --signing-private-seed {}",
+--key-id {} --aead-key {} --signing-public-key {}",
                     shell_escape(&cli.relay),
                     shell_escape(&cli.broadcast),
                     shell_escape(&track),
                     keys.key_id,
                     shell_escape(&keys.aead_key_hex()),
-                    shell_escape(&keys.signing_private_as_hex(true))
+                    shell_escape(&keys.signing_verify_hex())
                 )
             } else {
                 format!(
                     "moq-secure-chat-cli --relay {} --broadcast {} --track {} --role subscribe \
---key-id {} --aead-key {} --signing-private-seed {}",
+--key-id {} --aead-key {} --signing-public-key {}",
                     shell_escape(&cli.relay),
                     shell_escape(&cli.broadcast),
                     shell_escape(&track),
                     keys.key_id,
                     shell_escape(&keys.aead_key_hex()),
-                    shell_escape(&keys.signing_private_as_hex(true))
+                    shell_escape(&keys.signing_verify_hex())
                 )
             };
 
@@ -175,6 +178,15 @@ async fn main() -> Result<()> {
         }
 
         Role::Subscribe => {
+            // Subscribe needs signing public verify key
+            let signing_public = cli
+                .signing_public_key
+                .context("--signing-public-key is required for subscribe mode")?;
+
+            // Construct ChatKeys using the public-verify constructor (dummy private inside)
+            let keys = ChatKeys::from_strings_public_verify(key_id, &aead_key, &signing_public)
+                .context("failed to construct ChatKeys (public-verify)")?;
+
             let reconnect = client
                 .with_subscriber(origin.clone())
                 .reconnect(relay_url);
