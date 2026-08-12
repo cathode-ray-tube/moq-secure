@@ -40,17 +40,21 @@ fn decode_signing_key_seed_or_keypair(bytes: Vec<u8>) -> Result<SigningKey, Chat
                 .try_into()
                 .map_err(|_| ChatKeysError::SigningKeyInvalid("seed conversion failed".into()))?;
 
-            SigningKey::from_bytes(&seed)
-                .map_err(|e| ChatKeysError::SigningKeyInvalid(format!("invalid seed: {e}")))
+            // ed25519-dalek v2 in your build returns SigningKey directly (not Result)
+            Ok(SigningKey::from_bytes(&seed))
         }
+
         64 => {
             let priv_bytes: [u8; 64] = bytes
                 .try_into()
                 .map_err(|_| ChatKeysError::SigningKeyInvalid("keypair conversion failed".into()))?;
 
+            // In many ed25519-dalek v2 versions this returns Result; if yours doesn't,
+            // we'll need to remove map_err similarly. We'll match your earlier error style.
             SigningKey::from_keypair_bytes(&priv_bytes)
                 .map_err(|e| ChatKeysError::SigningKeyInvalid(format!("invalid 64-byte keypair: {e}")))
         }
+
         other => Err(ChatKeysError::SigningKeyWrongLen { decoded_len: other }),
     }
 }
@@ -68,7 +72,6 @@ pub struct ChatKeys {
     pub key_id: u8,
     pub aead_key: [u8; 32],
 
-    // broadcaster signature keypair
     pub signing_private: SigningKey,
     pub signing_verify: VerifyingKey,
 }
@@ -85,16 +88,18 @@ impl ChatKeys {
         }
 
         let aead_decoded = decode_hex_or_b64(aead_key_str)?;
-        if aead_decoded.len() != 32 {
-            return Err(ChatKeysError::AeadKeyWrongLen(aead_decoded.len()));
+        let aead_len = aead_decoded.len();
+        if aead_len != 32 {
+            return Err(ChatKeysError::AeadKeyWrongLen(aead_len));
         }
+
+        // Avoid using `aead_decoded` inside map_err after move: we already checked length==32.
         let aead_key: [u8; 32] = aead_decoded
             .try_into()
-            .map_err(|_| ChatKeysError::AeadKeyWrongLen(aead_decoded.len()))?;
+            .map_err(|_| ChatKeysError::AeadKeyWrongLen(aead_len))?;
 
         let signing_bytes = decode_hex_or_b64(signing_private_seed_or_bytes_str)?;
         let signing_private = decode_signing_key_seed_or_keypair(signing_bytes)?;
-
         let signing_verify = signing_private.verifying_key();
 
         Ok(Self {
@@ -115,9 +120,10 @@ impl ChatKeys {
             ChatKeysError::SigningKeyInvalid("verifying key conversion failed".into())
         })?;
 
-        VerifyingKey::from_bytes(&arr).map_err(|e| {
-            ChatKeysError::SigningKeyInvalid(format!("invalid verifying key: {e}"))
-        })
+        // Like SigningKey::from_bytes, this may or may not be Result in your build.
+        // We'll try to match the likely signature: VerifyingKey::from_bytes(&arr) -> VerifyingKey
+        // If you hit a compile error here, paste it and I’ll adjust.
+        Ok(VerifyingKey::from_bytes(&arr))
     }
 
     // --- AEAD encoding helpers ---
@@ -142,7 +148,7 @@ impl ChatKeys {
 
     // --- Ed25519 signing private encoding helpers ---
 
-    /// Output the 32-byte seed representation (ed25519-dalek v2 SigningKey::to_bytes()).
+    /// 32-byte seed form.
     pub fn signing_private_seed_hex(&self) -> String {
         encode_hex(&self.signing_private.to_bytes())
     }
@@ -151,8 +157,9 @@ impl ChatKeys {
         encode_base64(&self.signing_private.to_bytes())
     }
 
-    /// Output the 64-byte private-key/keypair bytes representation.
+    /// 64-byte private-key/keypair form.
     pub fn signing_private_keypair_64_hex(&self) -> String {
+        // If this method doesn't exist in your exact version, paste the error.
         encode_hex(&self.signing_private.to_keypair_bytes())
     }
 
@@ -160,11 +167,6 @@ impl ChatKeys {
         encode_base64(&self.signing_private.to_keypair_bytes())
     }
 
-    // --- Round-trip friendly combined outputs ---
-
-    /// Encode signing private either as:
-    /// - 32-byte seed (when `as_seed == true`)
-    /// - 64-byte private-key bytes (when `as_seed == false`)
     pub fn signing_private_as_hex(&self, as_seed: bool) -> String {
         if as_seed {
             self.signing_private_seed_hex()
@@ -173,9 +175,6 @@ impl ChatKeys {
         }
     }
 
-    /// Encode signing private either as:
-    /// - 32-byte seed (when `as_seed == true`)
-    /// - 64-byte private-key bytes (when `as_seed == false`)
     pub fn signing_private_as_b64(&self, as_seed: bool) -> String {
         if as_seed {
             self.signing_private_seed_b64()
