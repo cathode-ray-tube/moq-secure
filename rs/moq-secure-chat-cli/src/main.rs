@@ -8,7 +8,6 @@ use url::Url;
 
 use std::env;
 use std::path::PathBuf;
-use tokio::task::AbortHandle;
 
 #[derive(Parser, Debug, Clone)]
 struct Cli {
@@ -187,14 +186,9 @@ async fn main() -> Result<()> {
             let mut ctrl_c_fut = tokio::signal::ctrl_c();
             tokio::pin!(ctrl_c_fut);
 
-            // Fix for E0382: use AbortHandle so we don't need to call stdin_task.abort()
-            // after stdin_task has been moved into select! branch.
-            let (abort_handle, abort_reg) = AbortHandle::new_pair();
-
-            let stdin_task = tokio::spawn(async move {
+            // IMPORTANT: keep stdin_task movable for abort by using &mut stdin_task in select!
+            let mut stdin_task = tokio::spawn(async move {
                 use tokio::io::{self, AsyncBufReadExt};
-
-                let _reg = abort_reg; // must be held until task ends
 
                 let stdin = io::stdin();
                 let mut reader = io::BufReader::new(stdin).lines();
@@ -207,12 +201,15 @@ async fn main() -> Result<()> {
 
             let result: Result<()> = tokio::select! {
                 res = reconnect.closed() => res.map_err(Into::into),
-                res = stdin_task => {
+
+                // Borrow stdin_task so it isn't moved into this branch.
+                res = &mut stdin_task => {
                     let inner: Result<()> = res.map_err(|e| anyhow::anyhow!(e))?;
                     inner.map_err(|e| anyhow::anyhow!(e))
                 },
+
                 _ = &mut ctrl_c_fut => {
-                    abort_handle.abort();
+                    stdin_task.abort();
                     Ok(())
                 }
             };
