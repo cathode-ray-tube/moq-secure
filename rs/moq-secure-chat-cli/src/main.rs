@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use chrono::Local;
 use moq_net::{Origin, Path};
 use moq_secure_chat::{ChatKeys, ChatPublisher, ChatSubscriber};
 use rand::RngCore;
@@ -46,12 +47,8 @@ struct Cli {
 
 #[derive(Subcommand, Debug, Clone)]
 enum Role {
-    /// Publish messages to the track. CLI prints a copy-pastable subscribe command.
-    Publish {
-        /// Publish a single message then exit (UTF-8). If omitted, read stdin until EOF.
-        #[arg(long)]
-        message: Option<String>,
-    },
+    /// Publish messages to the track. Reads stdin until Ctrl+C; each line is one chat message.
+    Publish {},
     /// Subscribe and print decrypted messages.
     Subscribe,
 }
@@ -82,25 +79,37 @@ fn gen_signing_private_seed_hex() -> String {
     hex::encode(seed)
 }
 
+fn print_launch_art() {
+    println!("  __  __           ____                  ");
+    println!(" |  \\/  |         / __ \\                 ");
+    println!(" | \\  / |  ___  | |  | |_   _  ___ _ __");
+    println!(" | |\\/| | / _ \\ | |  | | | | |/ _ \\ '__|");
+    println!(" | |  | || (_) || |__| | |_| |  __/ |   ");
+    println!(" |_|  |_| \\___/  \\____/ \\__,_|\\___|_|   ");
+    println!("               MOQ-Secure\n");
+}
+
+fn time_only_hhmmss() -> String {
+    Local::now().format("%H:%M:%S").to_string()
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
+    print_launch_art();
 
     let cli = Cli::parse();
 
-    // Determine track
     let track = match (&cli.role, &cli.track) {
-        (Role::Publish { .. }, Some(t)) => t.clone(),
-        (Role::Publish { .. }, None) => random_track_hex(),
+        (Role::Publish {}, Some(t)) => t.clone(),
+        (Role::Publish {}, None) => random_track_hex(),
         (Role::Subscribe, Some(t)) => t.clone(),
         (Role::Subscribe, None) => anyhow::bail!("--track is required for subscribe mode"),
     };
 
-    // Keys: generate defaults when not supplied (publish-focused behavior).
     let key_id: u8 = cli.key_id.unwrap_or_else(gen_key_id);
     let aead_key: String = cli.aead_key.unwrap_or_else(gen_aead_key_hex);
 
-    // moq-native client config with TLS disable verify
     let relay_url: Url = cli
         .relay
         .parse()
@@ -114,12 +123,9 @@ async fn main() -> Result<()> {
     let origin = Origin::random().produce();
 
     match cli.role {
-        Role::Publish { message } => {
-            // Publish needs signing private seed for ChatKeys::from_strings.
-            // If not provided, generate one.
-            let signing_private_seed_or_bytes = cli
-                .signing_private_seed
-                .unwrap_or_else(gen_signing_private_seed_hex);
+        Role::Publish {} => {
+            let signing_private_seed_or_bytes =
+                cli.signing_private_seed.unwrap_or_else(gen_signing_private_seed_hex);
 
             let keys = ChatKeys::from_strings(key_id, &aead_key, &signing_private_seed_or_bytes)
                 .context("failed to construct ChatKeys from provided/generated values")?;
@@ -135,11 +141,11 @@ async fn main() -> Result<()> {
                 .create_track(track.clone(), None)
                 .context("failed to create track")?;
 
-            // Print copy-pastable subscribe command.
+            let pwd_bin = "$(pwd)/moq-secure-chat-cli";
+
             let subscribe_cmd = if cli.tls_disable_verify {
                 format!(
-                    "moq-secure-chat-cli --relay {} --broadcast {} --track {} --tls-disable-verify subscribe \
---key-id {} --aead-key {} --signing-public-key {}",
+                    "{pwd_bin} --relay {} --broadcast {} --track {} --key-id {} --aead-key {} --signing-public-key {} --tls-disable-verify subscribe",
                     shell_escape(&cli.relay),
                     shell_escape(&cli.broadcast),
                     shell_escape(&track),
@@ -149,8 +155,7 @@ async fn main() -> Result<()> {
                 )
             } else {
                 format!(
-                    "moq-secure-chat-cli --relay {} --broadcast {} --track {} subscribe \
---key-id {} --aead-key {} --signing-public-key {}",
+                    "{pwd_bin} --relay {} --broadcast {} --track {} --key-id {} --aead-key {} --signing-public-key {} subscribe",
                     shell_escape(&cli.relay),
                     shell_escape(&cli.broadcast),
                     shell_escape(&track),
@@ -160,32 +165,34 @@ async fn main() -> Result<()> {
                 )
             };
 
-            println!("=== Copy/paste subscribe command (run in another terminal) ===");
+            println!("=== Copy/paste subscriber command (run in another terminal) ===");
             println!("{subscribe_cmd}");
+            println!("=== Publisher running ===");
+            println!("Type lines on stdin; each line is one chat message. Press Ctrl+C to quit.\n");
 
             let mut publisher = ChatPublisher::new(track_producer, keys);
+            let reconnect = client.with_publisher(&origin).reconnect(relay_url);
 
-            let reconnect = client
-                .with_publisher(&origin)
-                .reconnect(relay_url);
+            let ctrl_c = async {
+                tokio::signal::ctrl_c().await.ok();
+            };
+
+            let stdin_task = async {
+                use tokio::io::{self, AsyncBufReadExt};
+
+                let stdin = io::stdin();
+                let mut reader = io::BufReader::new(stdin).lines();
+
+                while let Some(line) = reader.next_line().await? {
+                    publisher.send_message(line.as_bytes()).await?;
+                }
+                Ok::<(), anyhow::Error>(())
+            };
 
             let result = tokio::select! {
                 res = reconnect.closed() => res.map_err(Into::into),
-                _ = async {
-                    if let Some(msg) = message {
-                        publisher.send_message(msg.as_bytes()).await?;
-                    } else {
-                        use tokio::io::{self, AsyncBufReadExt};
-                        let stdin = io::stdin();
-                        let mut reader = io::BufReader::new(stdin).lines();
-
-                        tracing::info!("Reading lines from stdin; each line becomes one chat message.");
-                        while let Some(line) = reader.next_line().await? {
-                            publisher.send_message(line.as_bytes()).await?;
-                        }
-                    }
-                    Ok::<(), anyhow::Error>(())
-                } => Ok(())
+                res = stdin_task => res,
+                _ = ctrl_c => Ok(()),
             };
 
             broadcast.finish();
@@ -197,13 +204,10 @@ async fn main() -> Result<()> {
                 .signing_public_key
                 .context("--signing-public-key is required for subscribe mode")?;
 
-            // Construct ChatKeys using the public-verify constructor.
             let keys = ChatKeys::from_strings_public_verify(key_id, &aead_key, &signing_public)
                 .context("failed to construct ChatKeys (public-verify)")?;
 
-            let reconnect = client
-                .with_subscriber(origin.clone())
-                .reconnect(relay_url);
+            let reconnect = client.with_subscriber(origin.clone()).reconnect(relay_url);
 
             let path: Path<'_> = cli.broadcast.as_str().into();
 
@@ -220,32 +224,62 @@ async fn main() -> Result<()> {
             );
 
             let mut sub: Option<moq_net::track::Subscriber> = None;
+            let mut subscriber_task: Option<tokio::task::JoinHandle<Result<()>>> = None;
 
             loop {
                 tokio::select! {
                     Some(moq_net::announce::Update { path: _path, broadcast }) = origin.next() => match broadcast {
                         Some(b) => {
                             tracing::info!("broadcast is online, subscribing to track");
+
                             let track_sub = b.track(&track)?.subscribe(None).await?;
                             sub = Some(track_sub);
+
+                            // If an old subscriber task exists, abort it and replace.
+                            if let Some(handle) = subscriber_task.take() {
+                                handle.abort();
+                            }
+
+                            let track_name = track.clone();
+                            let keys_clone = keys.clone();
+
+                            let track_sub_for_task = sub.take().unwrap();
+                            subscriber_task = Some(tokio::spawn(async move {
+                                let subscriber = ChatSubscriber::new(track_sub_for_task, keys_clone);
+                                subscriber.run(move |pt| {
+                                    if let Ok(s) = String::from_utf8(pt.clone()) {
+                                        let ts = time_only_hhmmss();
+                                        println!("[{}] {}: {}", ts, track_name, s);
+                                    } else {
+                                        eprintln!("(non-utf8 message) {} bytes", pt.len());
+                                    }
+                                }).await?;
+                                Ok::<(), anyhow::Error>(())
+                            }));
                         }
                         None => {
                             tracing::warn!("broadcast offline, waiting...");
+                            sub = None;
+                            if let Some(handle) = subscriber_task.take() {
+                                handle.abort();
+                            }
                         }
                     },
+
                     res = reconnect.closed() => return Ok(res?),
-                    true = async { sub.is_some() } => {
-                        let track_sub = sub.take().unwrap();
-                        let subscriber = ChatSubscriber::new(track_sub, keys.clone());
-                        subscriber
-                            .run(|pt| {
-                                if let Ok(s) = String::from_utf8(pt.clone()) {
-                                    println!("{}", s);
-                                } else {
-                                    eprintln!("(non-utf8 message) {} bytes", pt.len());
-                                }
-                            })
-                            .await?;
+
+                    // If the subscriber task ends due to error, return it.
+                    _ = async {
+                        if let Some(handle) = &subscriber_task {
+                            if handle.is_finished() {
+                                return true;
+                            }
+                        }
+                        false
+                    } => {
+                        if let Some(handle) = subscriber_task.take() {
+                            return handle.await;
+                        }
                     }
                 }
             }
