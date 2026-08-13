@@ -8,7 +8,7 @@ use url::Url;
 
 use std::env;
 use std::path::PathBuf;
-use std::sync::mpsc;
+use tokio::sync::mpsc;
 use std::io::{self, BufRead};
 
 #[derive(Parser, Debug, Clone)]
@@ -184,13 +184,13 @@ async fn main() -> Result<()> {
             let reconnect = client.with_publisher(&origin).reconnect(relay_url);
 
             // Spawn stdin reading in a background thread
-            let (tx, mut rx) = mpsc::channel::<String>();
+            let (tx, mut rx) = mpsc::channel::<String>(100);
             std::thread::spawn(move || {
                 let stdin = io::stdin();
                 let reader = stdin.lock();
                 for line in reader.lines() {
                     if let Ok(text) = line {
-                        let _ = tx.send(text);
+                        let _ = tx.blocking_send(text);
                     } else {
                         break;
                     }
@@ -202,7 +202,7 @@ async fn main() -> Result<()> {
 
             let stdin_task = tokio::spawn(async move {
                 let mut publisher = publisher;
-                while let Ok(text) = rx.recv() {
+                while let Some(text) = rx.recv().await {
                     if let Err(e) = publisher.send_message(text.as_bytes()).await {
                         eprintln!("Error sending message: {}", e);
                         return Err(e);
