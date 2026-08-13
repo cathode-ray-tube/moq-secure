@@ -86,7 +86,7 @@ fn print_launch_art() {
     println!("  __  __           ____                  ");
     println!(" |  \\/  |         / __ \\                 ");
     println!(" | \\  / |  ___  | |  | |_   _  ___ _ __");
-    println!(" | |\\/| | / _ \\ | |  | | | | |/ _ \\ '__|");
+    println!(" | |\\/| | / _ \\ | |  | | | | | |/ _ \\ '__|");
     println!(" | |  | || (_) || |__| | |_| |  __/ |   ");
     println!(" |_|  |_| \\___/  \\____/ \\__,_|\\___|_|   ");
     println!("               MOQ-Secure\n");
@@ -179,10 +179,12 @@ async fn main() -> Result<()> {
             println!("=== Publisher running ===");
             println!("Type lines on stdin; each line is one chat message. Press Ctrl+C to quit.\n");
 
-            let mut publisher = ChatPublisher::new(track_producer, keys);
+            let publisher = ChatPublisher::new(track_producer, keys);
             let reconnect = client.with_publisher(&origin).reconnect(relay_url);
 
+            let mut publisher = publisher;
             let mut ctrl_c_fut = tokio::signal::ctrl_c();
+            tokio::pin!(ctrl_c_fut);
 
             let stdin_task = tokio::spawn(async move {
                 use tokio::io::{self, AsyncBufReadExt};
@@ -191,9 +193,8 @@ async fn main() -> Result<()> {
                 let mut reader = io::BufReader::new(stdin).lines();
 
                 while let Some(line) = reader.next_line().await? {
-                    // If send_message expects owned bytes, use to_vec().
-                    // If it expects & [u8], this will still compile because it can coerce &Vec<u8> to &[u8].
-                    publisher.send_message(line.as_bytes().to_vec()).await?;
+                    // send_message expects &[u8]
+                    publisher.send_message(line.as_bytes()).await?;
                 }
                 Ok::<(), anyhow::Error>(())
             });
@@ -242,9 +243,8 @@ async fn main() -> Result<()> {
                     tokio::select! {
                         res = reconnect.closed() => return Ok(res?),
 
+                        // JoinHandle<Result<()>>
                         res = handle => {
-                            // handle: JoinHandle<Result<()>>
-                            // join: Result<Result<()>, JoinError>
                             res.map_err(Into::into)??;
                             return Ok(());
                         }
