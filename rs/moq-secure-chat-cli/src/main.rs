@@ -16,7 +16,7 @@ struct Cli {
     #[arg(long)]
     broadcast: String,
 
-    /// Track name. Required in subscribe mode.
+    /// Track name. Required in subscribe mode. Generated in publish mode if not supplied.
     #[arg(long)]
     track: Option<String>,
 
@@ -223,62 +223,98 @@ async fn main() -> Result<()> {
                 "waiting for broadcast to be online"
             );
 
-            let mut sub: Option<moq_net::track::Subscriber> = None;
             let mut subscriber_task: Option<tokio::task::JoinHandle<Result<()>>> = None;
 
             loop {
-                tokio::select! {
-                    Some(moq_net::announce::Update { path: _path, broadcast }) = origin.next() => match broadcast {
-                        Some(b) => {
-                            tracing::info!("broadcast is online, subscribing to track");
+                // If we have a running subscriber task, we want to wait on either:
+                // - a new broadcast/track update
+                // - the task finishing (error)
+                // - reconnect closing
+                //
+                // If we don't have one yet, we only wait on updates + reconnect closing.
 
-                            let track_sub = b.track(&track)?.subscribe(None).await?;
-                            sub = Some(track_sub);
+                if let Some(handle) = subscriber_task.take() {
+                    let join_fut = async {
+                        let joined: Result<(), anyhow::Error> =
+                            handle.await.map_err(anyhow::Error::new)??;
+                        joined
+                    };
 
-                            // If an old subscriber task exists, abort it and replace.
-                            if let Some(handle) = subscriber_task.take() {
-                                handle.abort();
+                    tokio::select! {
+                        res = reconnect.closed() => return Ok(res?),
+
+                        // If the subscriber task returns (success or error), propagate it.
+                        res = join_fut => return res,
+
+                        // Announce updates can swap the track subscription; rebuild a new task.
+                        Some(moq_net::announce::Update { broadcast, .. }) = origin.next() => {
+                            match broadcast {
+                                Some(b) => {
+                                    tracing::info!("broadcast is online, subscribing to track");
+
+                                    let track_sub = b.track(&track)?.subscribe(None).await?;
+
+                                    // Start a new subscriber task for the (current) track subscription.
+                                    let track_name = track.clone();
+                                    let keys_clone = keys.clone();
+
+                                    subscriber_task = Some(tokio::spawn(async move {
+                                        let subscriber = ChatSubscriber::new(track_sub, keys_clone);
+                                        subscriber
+                                            .run(move |pt| {
+                                                if let Ok(s) = String::from_utf8(pt.clone()) {
+                                                    let ts = time_only_hhmmss();
+                                                    println!("[{}] {}: {}", ts, track_name, s);
+                                                } else {
+                                                    eprintln!("(non-utf8 message) {} bytes", pt.len());
+                                                }
+                                            })
+                                            .await?;
+                                        Ok::<(), anyhow::Error>(())
+                                    }));
+                                }
+                                None => {
+                                    tracing::warn!("broadcast offline, waiting...");
+                                    // No subscriber task while offline.
+                                    subscriber_task = None;
+                                }
                             }
-
-                            let track_name = track.clone();
-                            let keys_clone = keys.clone();
-
-                            let track_sub_for_task = sub.take().unwrap();
-                            subscriber_task = Some(tokio::spawn(async move {
-                                let subscriber = ChatSubscriber::new(track_sub_for_task, keys_clone);
-                                subscriber.run(move |pt| {
-                                    if let Ok(s) = String::from_utf8(pt.clone()) {
-                                        let ts = time_only_hhmmss();
-                                        println!("[{}] {}: {}", ts, track_name, s);
-                                    } else {
-                                        eprintln!("(non-utf8 message) {} bytes", pt.len());
-                                    }
-                                }).await?;
-                                Ok::<(), anyhow::Error>(())
-                            }));
                         }
-                        None => {
-                            tracing::warn!("broadcast offline, waiting...");
-                            sub = None;
-                            if let Some(handle) = subscriber_task.take() {
-                                handle.abort();
+                    }
+                } else {
+                    tokio::select! {
+                        res = reconnect.closed() => return Ok(res?),
+
+                        Some(moq_net::announce::Update { broadcast, .. }) = origin.next() => {
+                            match broadcast {
+                                Some(b) => {
+                                    tracing::info!("broadcast is online, subscribing to track");
+
+                                    let track_sub = b.track(&track)?.subscribe(None).await?;
+
+                                    let track_name = track.clone();
+                                    let keys_clone = keys.clone();
+
+                                    subscriber_task = Some(tokio::spawn(async move {
+                                        let subscriber = ChatSubscriber::new(track_sub, keys_clone);
+                                        subscriber
+                                            .run(move |pt| {
+                                                if let Ok(s) = String::from_utf8(pt.clone()) {
+                                                    let ts = time_only_hhmmss();
+                                                    println!("[{}] {}: {}", ts, track_name, s);
+                                                } else {
+                                                    eprintln!("(non-utf8 message) {} bytes", pt.len());
+                                                }
+                                            })
+                                            .await?;
+                                        Ok::<(), anyhow::Error>(())
+                                    }));
+                                }
+                                None => {
+                                    tracing::warn!("broadcast offline, waiting...");
+                                    subscriber_task = None;
+                                }
                             }
-                        }
-                    },
-
-                    res = reconnect.closed() => return Ok(res?),
-
-                    // If the subscriber task ends due to error, return it.
-                    _ = async {
-                        if let Some(handle) = &subscriber_task {
-                            if handle.is_finished() {
-                                return true;
-                            }
-                        }
-                        false
-                    } => {
-                        if let Some(handle) = subscriber_task.take() {
-                            return handle.await;
                         }
                     }
                 }
