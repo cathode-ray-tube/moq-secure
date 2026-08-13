@@ -236,7 +236,7 @@ async fn main() -> Result<()> {
                 if let Some(handle) = subscriber_task.take() {
                     let join_fut = async {
                         let joined: Result<(), anyhow::Error> =
-                            handle.await.map_err(anyhow::Error::new)??;
+                            handle.await.map_err(anyhow::Error::new)?;
                         joined
                     };
 
