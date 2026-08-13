@@ -21,12 +21,13 @@ impl ChatSession {
 }
 
 /// Publisher publishes each chat message as one MoQ group containing one frame.
-/// This is the “easy mapping”: 1 chat msg == 1 group with one object.
+/// “easy mapping”: 1 chat msg == 1 group with one object.
 pub struct ChatPublisher {
     pub keys: ChatKeys,
     pub track: moq_net::track::Producer,
     pub n_signed: u8, // 0 disables signing; CLI will use 1
-    pub ctr: u64,
+    pub crypto_ctr: u64,
+    pub group_ctr: u64,
 }
 
 impl ChatPublisher {
@@ -36,13 +37,17 @@ impl ChatPublisher {
             keys,
             track,
             n_signed: 1,
-            ctr: 0,
+            crypto_ctr: 0,
+            group_ctr: 0,
         }
     }
 
     pub async fn send_message(&mut self, plaintext: &[u8]) -> anyhow::Result<()> {
-        let ctr = self.ctr;
-        self.ctr = self.ctr.wrapping_add(1);
+        let crypto_ctr = self.crypto_ctr;
+        self.crypto_ctr = self.crypto_ctr.wrapping_add(1);
+
+        let group_id = self.group_ctr;
+        self.group_ctr = self.group_ctr.wrapping_add(1);
 
         // pad_len=0 for simplicity; you can add options later.
         let pad_len = 0u32;
@@ -53,7 +58,7 @@ impl ChatPublisher {
             &self.keystore_array(),
             &self.keys.signing_private,
             self.keys.key_id,
-            ctr,
+            crypto_ctr,
             self.n_signed,
             true,
             1,
@@ -64,7 +69,12 @@ impl ChatPublisher {
 
         let frame_bytes = frame.serialize();
 
-        let mut group = self.track.create_group(0u64.into()).context("create_group")?;
+        // IMPORTANT: group_id must be unique per group across sends.
+        let mut group = self
+            .track
+            .create_group(group_id.into())
+            .context("create_group")?;
+
         // One object per group.
         group.write_frame(moq_native::moq_net::Timestamp::now(), frame_bytes)?;
 
@@ -103,7 +113,10 @@ impl ChatSubscriber {
         }
     }
 
-    pub async fn run(mut self, mut on_message: impl FnMut(Vec<u8>) + Send) -> anyhow::Result<()> {
+    pub async fn run(
+        mut self,
+        mut on_message: impl FnMut(Vec<u8>) + Send,
+    ) -> anyhow::Result<()> {
         while let Some(mut group) = self.track.recv_group().await? {
             while let Some(object) = group.read_frame().await? {
                 let frame_bytes = &object.payload;
