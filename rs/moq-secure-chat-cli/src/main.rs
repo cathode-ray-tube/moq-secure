@@ -8,6 +8,7 @@ use url::Url;
 
 use std::env;
 use std::path::PathBuf;
+use tokio::task::AbortHandle;
 
 #[derive(Parser, Debug, Clone)]
 struct Cli {
@@ -182,11 +183,18 @@ async fn main() -> Result<()> {
             let reconnect = client.with_publisher(&origin).reconnect(relay_url);
 
             let mut publisher = publisher;
+
             let mut ctrl_c_fut = tokio::signal::ctrl_c();
             tokio::pin!(ctrl_c_fut);
 
+            // Fix for E0382: use AbortHandle so we don't need to call stdin_task.abort()
+            // after stdin_task has been moved into select! branch.
+            let (abort_handle, abort_reg) = AbortHandle::new_pair();
+
             let stdin_task = tokio::spawn(async move {
                 use tokio::io::{self, AsyncBufReadExt};
+
+                let _reg = abort_reg; // must be held until task ends
 
                 let stdin = io::stdin();
                 let mut reader = io::BufReader::new(stdin).lines();
@@ -204,7 +212,7 @@ async fn main() -> Result<()> {
                     inner.map_err(|e| anyhow::anyhow!(e))
                 },
                 _ = &mut ctrl_c_fut => {
-                    stdin_task.abort();
+                    abort_handle.abort();
                     Ok(())
                 }
             };
