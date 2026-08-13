@@ -130,9 +130,8 @@ async fn main() -> Result<()> {
             let signing_private_seed_or_bytes =
                 cli.signing_private_seed.unwrap_or_else(gen_signing_private_seed_hex);
 
-            let keys =
-                ChatKeys::from_strings(key_id, &aead_key, &signing_private_seed_or_bytes)
-                    .context("failed to construct ChatKeys from provided/generated values")?;
+            let keys = ChatKeys::from_strings(key_id, &aead_key, &signing_private_seed_or_bytes)
+                .context("failed to construct ChatKeys from provided/generated values")?;
 
             let mut broadcast = origin
                 .create_broadcast(
@@ -183,39 +182,33 @@ async fn main() -> Result<()> {
 
             let mut publisher = publisher;
 
-            use tokio::io::{self, AsyncBufReadExt};
-
-            // Ctrl+C future
             let mut ctrl_c_fut = tokio::signal::ctrl_c();
             tokio::pin!(ctrl_c_fut);
 
-            // reconnect.closed() is !Unpin, so pin it
-            let closed_fut = reconnect.closed();
-            tokio::pin!(closed_fut);
+            let mut stdin_task = tokio::spawn(async move {
+                use tokio::io::{self, AsyncBufReadExt};
 
-            let stdin = io::stdin();
-            let mut stdin_reader = io::BufReader::new(stdin).lines();
+                let stdin = io::stdin();
+                let mut reader = io::BufReader::new(stdin).lines();
 
-            let result: Result<()> = loop {
-                tokio::select! {
-                    res = &mut closed_fut => {
-                        let res = res.map_err(Into::into)?;
-                        break res;
-                    }
+                while let Some(line) = reader.next_line().await? {
+                    publisher.send_message(line.as_bytes()).await?;
+                }
+                Ok::<(), anyhow::Error>(())
+            });
 
-                    _ = &mut ctrl_c_fut => {
-                        break Ok(());
-                    }
+            let result: Result<()> = tokio::select! {
+                res = reconnect.closed() => res.map_err(Into::into),
 
-                    line = stdin_reader.next_line() => {
-                        match line {
-                            Ok(Some(line)) => {
-                                publisher.send_message(line.as_bytes()).await?;
-                            }
-                            Ok(None) => break Ok(()),   // EOF on stdin
-                            Err(e) => break Err(e.into()),
-                        }
-                    }
+                // FIX: ensure this arm returns Result<(), anyhow::Error>
+                res = &mut stdin_task => {
+                    let inner: Result<()> = res.map_err(|e| anyhow::anyhow!(e))?;
+                    inner
+                },
+
+                _ = &mut ctrl_c_fut => {
+                    stdin_task.abort();
+                    Ok(())
                 }
             };
 
@@ -228,8 +221,9 @@ async fn main() -> Result<()> {
                 .signing_public_key
                 .context("--signing-public-key is required for subscribe mode")?;
 
-            let keys = ChatKeys::from_strings_public_verify(key_id, &aead_key, &signing_public)
-                .context("failed to construct ChatKeys (public-verify)")?;
+            let keys =
+                ChatKeys::from_strings_public_verify(key_id, &aead_key, &signing_public)
+                    .context("failed to construct ChatKeys (public-verify)")?;
 
             let reconnect = client.with_subscriber(origin.clone()).reconnect(relay_url);
 
