@@ -113,7 +113,7 @@ async fn main() -> Result<()> {
     };
 
     let key_id: u8 = cli.key_id.unwrap_or_else(gen_key_id);
-    let aead_key: String = cli.aead_key.unwrap_or_else(gen_aeda_key_hex);
+    let aead_key: String = cli.aead_key.unwrap_or_else(gen_aead_key_hex);
 
     let relay_url: Url = cli
         .relay
@@ -202,7 +202,7 @@ async fn main() -> Result<()> {
 
             let stdin_task = tokio::spawn(async move {
                 let mut publisher = publisher;
-                while let Some(text) = rx.recv() {
+                while let Ok(text) = rx.recv() {
                     if let Err(e) = publisher.send_message(text.as_bytes()).await {
                         eprintln!("Error sending message: {}", e);
                         return Err(e);
