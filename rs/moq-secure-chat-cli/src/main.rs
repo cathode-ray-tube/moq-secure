@@ -145,7 +145,7 @@ async fn main() -> Result<()> {
                 .create_track(track.clone(), None)
                 .context("failed to create track")?;
 
-            // Current directory + binary name
+            // Current directory + binary name (absolute path)
             let pwd_bin: PathBuf = env::current_dir()?.join("moq-secure-chat-cli");
             let pwd_bin_str = pwd_bin.to_string_lossy();
             let pwd_bin_escaped = shell_escape(&pwd_bin_str);
@@ -182,27 +182,35 @@ async fn main() -> Result<()> {
             let mut publisher = ChatPublisher::new(track_producer, keys);
             let reconnect = client.with_publisher(&origin).reconnect(relay_url);
 
+            // No JoinHandle needed: we stop the stdin loop directly when Ctrl+C arrives.
             let ctrl_c_fut = tokio::signal::ctrl_c();
 
-            let stdin_task = tokio::spawn(async move {
+            let stdin_and_ctrlc = async {
                 use tokio::io::{self, AsyncBufReadExt};
 
                 let stdin = io::stdin();
                 let mut reader = io::BufReader::new(stdin).lines();
 
-                while let Some(line) = reader.next_line().await? {
-                    publisher.send_message(line.as_bytes()).await?;
+                loop {
+                    tokio::select! {
+                        _ = &mut ctrl_c_fut.clone() => {
+                            // Stop immediately on Ctrl+C
+                            break;
+                        }
+                        line = reader.next_line() => {
+                            match line? {
+                                Some(l) => publisher.send_message(l.as_bytes()).await?,
+                                None => break,
+                            }
+                        }
+                    }
                 }
                 Ok::<(), anyhow::Error>(())
-            });
+            };
 
             let result = tokio::select! {
                 res = reconnect.closed() => res.map_err(Into::into),
-                res = stdin_task => res.map_err(anyhow::Error::new)?,
-                _ = ctrl_c_fut => {
-                    stdin_task.abort();
-                    Ok(())
-                }
+                res = stdin_and_ctrlc => res.map_err(anyhow::Error::new)?,
             };
 
             broadcast.finish();
