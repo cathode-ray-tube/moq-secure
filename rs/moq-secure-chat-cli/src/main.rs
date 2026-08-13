@@ -145,7 +145,7 @@ async fn main() -> Result<()> {
                 .create_track(track.clone(), None)
                 .context("failed to create track")?;
 
-            // Current directory + binary name (absolute path)
+            // Current directory + binary name
             let pwd_bin: PathBuf = env::current_dir()?.join("moq-secure-chat-cli");
             let pwd_bin_str = pwd_bin.to_string_lossy();
             let pwd_bin_escaped = shell_escape(&pwd_bin_str);
@@ -182,35 +182,29 @@ async fn main() -> Result<()> {
             let mut publisher = ChatPublisher::new(track_producer, keys);
             let reconnect = client.with_publisher(&origin).reconnect(relay_url);
 
-            // No JoinHandle needed: we stop the stdin loop directly when Ctrl+C arrives.
-            let ctrl_c_fut = tokio::signal::ctrl_c();
+            let mut ctrl_c_fut = tokio::signal::ctrl_c();
 
-            let stdin_and_ctrlc = async {
+            let stdin_task = tokio::spawn(async move {
                 use tokio::io::{self, AsyncBufReadExt};
 
                 let stdin = io::stdin();
                 let mut reader = io::BufReader::new(stdin).lines();
 
-                loop {
-                    tokio::select! {
-                        _ = &mut ctrl_c_fut.clone() => {
-                            // Stop immediately on Ctrl+C
-                            break;
-                        }
-                        line = reader.next_line() => {
-                            match line? {
-                                Some(l) => publisher.send_message(l.as_bytes()).await?,
-                                None => break,
-                            }
-                        }
-                    }
+                while let Some(line) = reader.next_line().await? {
+                    // If send_message expects owned bytes, use to_vec().
+                    // If it expects & [u8], this will still compile because it can coerce &Vec<u8> to &[u8].
+                    publisher.send_message(line.as_bytes().to_vec()).await?;
                 }
                 Ok::<(), anyhow::Error>(())
-            };
+            });
 
-            let result = tokio::select! {
+            let result: Result<()> = tokio::select! {
                 res = reconnect.closed() => res.map_err(Into::into),
-                res = stdin_and_ctrlc => res.map_err(anyhow::Error::new)?,
+                res = stdin_task => res.map_err(Into::into)?.map_err(Into::into),
+                _ = &mut ctrl_c_fut => {
+                    stdin_task.abort();
+                    Ok(())
+                }
             };
 
             broadcast.finish();
@@ -245,14 +239,15 @@ async fn main() -> Result<()> {
 
             loop {
                 if let Some(handle) = subscriber_task.take() {
-                    let join_fut = async {
-                        handle.await.map_err(anyhow::Error::new)?;
-                        Ok::<(), anyhow::Error>(())
-                    };
-
                     tokio::select! {
                         res = reconnect.closed() => return Ok(res?),
-                        res = join_fut => return res,
+
+                        res = handle => {
+                            // handle: JoinHandle<Result<()>>
+                            // join: Result<Result<()>, JoinError>
+                            res.map_err(Into::into)??;
+                            return Ok(());
+                        }
 
                         Some(moq_net::announce::Update { broadcast, .. }) = origin.next() => {
                             match broadcast {
