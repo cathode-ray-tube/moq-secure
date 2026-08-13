@@ -186,8 +186,18 @@ async fn main() -> Result<()> {
 
             let stdin_task = tokio::spawn(async move {
                 use tokio::io::{self, AsyncBufReadExt};
+                use std::os::unix::io::AsRawFd;
 
                 let stdin = io::stdin();
+                let stdin_fd = stdin.as_raw_fd();
+                
+                // Set stdin to non-blocking mode
+                let mut flags = nix::fcntl::fcntl(stdin_fd, nix::fcntl::FcntlArg::GetFlags)
+                    .context("failed to get stdin flags")?;
+                flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
+                nix::fcntl::fcntl(stdin_fd, nix::fcntl::FcntlArg::SetFlags(flags))
+                    .context("failed to set stdin to non-blocking")?;
+
                 let mut reader = io::BufReader::new(stdin).lines();
                 let mut publisher = publisher;
 
