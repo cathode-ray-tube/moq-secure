@@ -8,6 +8,8 @@ use url::Url;
 
 use std::env;
 use std::path::PathBuf;
+use std::sync::mpsc;
+use std::io::{self, BufRead};
 
 #[derive(Parser, Debug, Clone)]
 struct Cli {
@@ -111,7 +113,7 @@ async fn main() -> Result<()> {
     };
 
     let key_id: u8 = cli.key_id.unwrap_or_else(gen_key_id);
-    let aead_key: String = cli.aead_key.unwrap_or_else(gen_aead_key_hex);
+    let aead_key: String = cli.aead_key.unwrap_or_else(gen_aeda_key_hex);
 
     let relay_url: Url = cli
         .relay
@@ -181,41 +183,32 @@ async fn main() -> Result<()> {
             let publisher = ChatPublisher::new(track_producer, keys);
             let reconnect = client.with_publisher(&origin).reconnect(relay_url);
 
+            // Spawn stdin reading in a background thread
+            let (tx, mut rx) = mpsc::channel::<String>();
+            std::thread::spawn(move || {
+                let stdin = io::stdin();
+                let reader = stdin.lock();
+                for line in reader.lines() {
+                    if let Ok(text) = line {
+                        let _ = tx.send(text);
+                    } else {
+                        break;
+                    }
+                }
+            });
+
             let mut ctrl_c_fut = tokio::signal::ctrl_c();
             tokio::pin!(ctrl_c_fut);
 
             let stdin_task = tokio::spawn(async move {
-                use tokio::io::{self, AsyncBufReadExt};
-                use std::os::unix::io::AsRawFd;
-
-                let stdin = io::stdin();
-                let stdin_fd = stdin.as_raw_fd();
-                
-                // Set stdin to non-blocking mode
-                let mut flags = nix::fcntl::fcntl(stdin_fd, nix::fcntl::FcntlArg::GetFlags)
-                    .context("failed to get stdin flags")?;
-                flags.insert(nix::fcntl::OFlag::O_NONBLOCK);
-                nix::fcntl::fcntl(stdin_fd, nix::fcntl::FcntlArg::SetFlags(flags))
-                    .context("failed to set stdin to non-blocking")?;
-
-                let mut reader = io::BufReader::new(stdin).lines();
                 let mut publisher = publisher;
-
-                loop {
-                    match reader.next_line().await {
-                        Ok(Some(text)) => {
-                            if let Err(e) = publisher.send_message(text.as_bytes()).await {
-                                eprintln!("Error sending message: {}", e);
-                                return Err(e);
-                            }
-                        }
-                        Ok(None) => {
-                            // stdin closed
-                            return Ok::<(), anyhow::Error>(());
-                        }
-                        Err(e) => return Err(e.into()),
+                while let Some(text) = rx.recv() {
+                    if let Err(e) = publisher.send_message(text.as_bytes()).await {
+                        eprintln!("Error sending message: {}", e);
+                        return Err(e);
                     }
                 }
+                Ok::<(), anyhow::Error>(())
             });
 
             let result: Result<()> = tokio::select! {
