@@ -180,42 +180,49 @@ async fn main() -> Result<()> {
 
             let publisher = ChatPublisher::new(track_producer, keys);
             let reconnect = client.with_publisher(&origin).reconnect(relay_url);
-
             let mut publisher = publisher;
 
             let mut ctrl_c_fut = tokio::signal::ctrl_c();
             tokio::pin!(ctrl_c_fut);
 
-            // IMPORTANT: keep stdin_task movable for abort by using &mut stdin_task in select!
-            let mut stdin_task = tokio::spawn(async move {
-                use tokio::io::{self, AsyncBufReadExt};
+            use tokio::io::{self, AsyncBufReadExt};
 
+            let mut stdin_reader = {
                 let stdin = io::stdin();
-                let mut reader = io::BufReader::new(stdin).lines();
-
-                while let Some(line) = reader.next_line().await? {
-                    publisher.send_message(line.as_bytes()).await?;
-                }
-                Ok::<(), anyhow::Error>(())
-            });
-
-            let result: Result<()> = tokio::select! {
-                res = reconnect.closed() => res.map_err(Into::into),
-
-                // Borrow stdin_task so it isn't moved into this branch.
-                res = &mut stdin_task => {
-                    let inner: Result<()> = res.map_err(|e| anyhow::anyhow!(e))?;
-                    inner.map_err(|e| anyhow::anyhow!(e))
-                },
-
-                _ = &mut ctrl_c_fut => {
-                    stdin_task.abort();
-                    Ok(())
-                }
+                io::BufReader::new(stdin).lines()
             };
 
-            broadcast.finish();
-            result
+            let mut closed_fut = reconnect.closed();
+
+            loop {
+                tokio::select! {
+                    res = &mut closed_fut => {
+                        let res = res.map_err(Into::into)?;
+                        // reconnect.closed() resolves when the connection is closed
+                        break res;
+                    }
+
+                    _ = &mut ctrl_c_fut => {
+                        // Ctrl+C: exit promptly
+                        break Ok(());
+                    }
+
+                    line = stdin_reader.next_line() => {
+                        match line {
+                            Ok(Some(line)) => {
+                                publisher.send_message(line.as_bytes()).await?;
+                            }
+                            Ok(None) => {
+                                // EOF on stdin (e.g., Ctrl+D)
+                                break Ok(());
+                            }
+                            Err(e) => {
+                                break Err(e.into());
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Role::Subscribe => {
