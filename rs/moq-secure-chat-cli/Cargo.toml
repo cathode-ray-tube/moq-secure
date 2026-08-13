@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "signal"] }
 tracing = "0.1"
 clap = { version = "4", features = ["derive"] }
 
@@ -18,3 +18,5 @@ ed25519-dalek = "2"
 hex = "0.4"
 base64 = "0.22"
 rand = "0.8"
+
+chrono = "0.4"
