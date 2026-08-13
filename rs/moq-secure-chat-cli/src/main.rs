@@ -6,6 +6,9 @@ use moq_secure_chat::{ChatKeys, ChatPublisher, ChatSubscriber};
 use rand::RngCore;
 use url::Url;
 
+use std::env;
+use std::path::PathBuf;
+
 #[derive(Parser, Debug, Clone)]
 struct Cli {
     /// MoQ relay endpoint (same format as moq-native examples)
@@ -141,27 +144,32 @@ async fn main() -> Result<()> {
                 .create_track(track.clone(), None)
                 .context("failed to create track")?;
 
-            let pwd_bin = "$(pwd)/moq-secure-chat-cli";
+            // Current directory + binary name
+            let pwd_bin: PathBuf = env::current_dir()?.join("moq-secure-chat-cli");
+            let pwd_bin_str = pwd_bin.to_string_lossy();
+            let pwd_bin_escaped = shell_escape(&pwd_bin_str);
 
             let subscribe_cmd = if cli.tls_disable_verify {
                 format!(
-                    "{pwd_bin} --relay {} --broadcast {} --track {} --key-id {} --aead-key {} --signing-public-key {} --tls-disable-verify subscribe",
+                    "{bin} --relay {} --broadcast {} --track {} --key-id {} --aead-key {} --signing-public-key {} --tls-disable-verify subscribe",
                     shell_escape(&cli.relay),
                     shell_escape(&cli.broadcast),
                     shell_escape(&track),
                     keys.key_id,
                     shell_escape(&keys.aead_key_hex()),
-                    shell_escape(&keys.signing_verify_hex())
+                    shell_escape(&keys.signing_verify_hex()),
+                    bin = pwd_bin_escaped
                 )
             } else {
                 format!(
-                    "{pwd_bin} --relay {} --broadcast {} --track {} --key-id {} --aead-key {} --signing-public-key {} subscribe",
+                    "{bin} --relay {} --broadcast {} --track {} --key-id {} --aead-key {} --signing-public-key {} subscribe",
                     shell_escape(&cli.relay),
                     shell_escape(&cli.broadcast),
                     shell_escape(&track),
                     keys.key_id,
                     shell_escape(&keys.aead_key_hex()),
-                    shell_escape(&keys.signing_verify_hex())
+                    shell_escape(&keys.signing_verify_hex()),
+                    bin = pwd_bin_escaped
                 )
             };
 
