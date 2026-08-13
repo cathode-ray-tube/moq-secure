@@ -86,7 +86,7 @@ fn print_launch_art() {
     println!("  __  __           ____                  ");
     println!(" |  \\/  |         / __ \\                 ");
     println!(" | \\  / |  ___  | |  | |_   _  ___ _ __");
-    println!(" | |\\/| | / _ \\ | |  | | | | | |/ _ \\ '__|");
+    println!(" | |\\/| | / _ \\ | |  | | | | |/ _ \\ '__|");
     println!(" | |  | || (_) || |__| | |_| |  __/ |   ");
     println!(" |_|  |_| \\___/  \\____/ \\__,_|\\___|_|   ");
     println!("               MOQ-Secure\n");
@@ -145,7 +145,6 @@ async fn main() -> Result<()> {
                 .create_track(track.clone(), None)
                 .context("failed to create track")?;
 
-            // Current directory + binary name
             let pwd_bin: PathBuf = env::current_dir()?.join("moq-secure-chat-cli");
             let pwd_bin_str = pwd_bin.to_string_lossy();
             let pwd_bin_escaped = shell_escape(&pwd_bin_str);
@@ -193,7 +192,6 @@ async fn main() -> Result<()> {
                 let mut reader = io::BufReader::new(stdin).lines();
 
                 while let Some(line) = reader.next_line().await? {
-                    // send_message expects &[u8]
                     publisher.send_message(line.as_bytes()).await?;
                 }
                 Ok::<(), anyhow::Error>(())
@@ -201,7 +199,10 @@ async fn main() -> Result<()> {
 
             let result: Result<()> = tokio::select! {
                 res = reconnect.closed() => res.map_err(Into::into),
-                res = stdin_task => res.map_err(Into::into)?.map_err(Into::into),
+                res = stdin_task => {
+                    let inner: Result<()> = res.map_err(|e| anyhow::anyhow!(e))?;
+                    inner.map_err(|e| anyhow::anyhow!(e))
+                },
                 _ = &mut ctrl_c_fut => {
                     stdin_task.abort();
                     Ok(())
@@ -243,9 +244,8 @@ async fn main() -> Result<()> {
                     tokio::select! {
                         res = reconnect.closed() => return Ok(res?),
 
-                        // JoinHandle<Result<()>>
                         res = handle => {
-                            res.map_err(Into::into)??;
+                            res.map_err(|e| anyhow::anyhow!(e))??;
                             return Ok(());
                         }
 
