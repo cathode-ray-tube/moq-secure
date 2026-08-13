@@ -130,8 +130,9 @@ async fn main() -> Result<()> {
             let signing_private_seed_or_bytes =
                 cli.signing_private_seed.unwrap_or_else(gen_signing_private_seed_hex);
 
-            let keys = ChatKeys::from_strings(key_id, &aead_key, &signing_private_seed_or_bytes)
-                .context("failed to construct ChatKeys from provided/generated values")?;
+            let keys =
+                ChatKeys::from_strings(key_id, &aead_key, &signing_private_seed_or_bytes)
+                    .context("failed to construct ChatKeys from provided/generated values")?;
 
             let mut broadcast = origin
                 .create_broadcast(
@@ -181,11 +182,9 @@ async fn main() -> Result<()> {
             let mut publisher = ChatPublisher::new(track_producer, keys);
             let reconnect = client.with_publisher(&origin).reconnect(relay_url);
 
-            let ctrl_c = async {
-                tokio::signal::ctrl_c().await.ok();
-            };
+            let ctrl_c_fut = tokio::signal::ctrl_c();
 
-            let stdin_task = async {
+            let stdin_task = tokio::spawn(async move {
                 use tokio::io::{self, AsyncBufReadExt};
 
                 let stdin = io::stdin();
@@ -195,12 +194,15 @@ async fn main() -> Result<()> {
                     publisher.send_message(line.as_bytes()).await?;
                 }
                 Ok::<(), anyhow::Error>(())
-            };
+            });
 
             let result = tokio::select! {
                 res = reconnect.closed() => res.map_err(Into::into),
-                res = stdin_task => res,
-                _ = ctrl_c => Ok(()),
+                res = stdin_task => res.map_err(anyhow::Error::new)?,
+                _ = ctrl_c_fut => {
+                    stdin_task.abort();
+                    Ok(())
+                }
             };
 
             broadcast.finish();
@@ -242,11 +244,8 @@ async fn main() -> Result<()> {
 
                     tokio::select! {
                         res = reconnect.closed() => return Ok(res?),
-
-                        // If the subscriber task returns (success or error), propagate it.
                         res = join_fut => return res,
 
-                        // Announce updates can swap the track subscription; rebuild a new task.
                         Some(moq_net::announce::Update { broadcast, .. }) = origin.next() => {
                             match broadcast {
                                 Some(b) => {
@@ -254,7 +253,6 @@ async fn main() -> Result<()> {
 
                                     let track_sub = b.track(&track)?.subscribe(None).await?;
 
-                                    // Start a new subscriber task for the (current) track subscription.
                                     let track_name = track.clone();
                                     let keys_clone = keys.clone();
 
@@ -275,7 +273,6 @@ async fn main() -> Result<()> {
                                 }
                                 None => {
                                     tracing::warn!("broadcast offline, waiting...");
-                                    // No subscriber task while offline.
                                     subscriber_task = None;
                                 }
                             }
