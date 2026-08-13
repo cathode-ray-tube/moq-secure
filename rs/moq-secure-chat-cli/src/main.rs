@@ -130,8 +130,9 @@ async fn main() -> Result<()> {
             let signing_private_seed_or_bytes =
                 cli.signing_private_seed.unwrap_or_else(gen_signing_private_seed_hex);
 
-            let keys = ChatKeys::from_strings(key_id, &aead_key, &signing_private_seed_or_bytes)
-                .context("failed to construct ChatKeys from provided/generated values")?;
+            let keys =
+                ChatKeys::from_strings(key_id, &aead_key, &signing_private_seed_or_bytes)
+                    .context("failed to construct ChatKeys from provided/generated values")?;
 
             let mut broadcast = origin
                 .create_broadcast(
@@ -182,31 +183,65 @@ async fn main() -> Result<()> {
 
             let mut publisher = publisher;
 
+            // Outer Ctrl+C future (used to finish the select promptly if needed)
             let mut ctrl_c_fut = tokio::signal::ctrl_c();
             tokio::pin!(ctrl_c_fut);
 
-            let mut stdin_task = tokio::spawn(async move {
-                use tokio::io::{self, AsyncBufReadExt};
+            // Spawn stdin reader that ALSO exits on Ctrl+C (so it won't wait for a newline)
+            let mut stdin_task = {
+                let publisher_ref = &mut publisher;
+                // We can't move `publisher_ref` into the task, so instead we move `publisher` below.
+                // Therefore: create the task after moving `publisher` into it.
+                // To keep structure simple, move publisher into the task now and keep publisher only inside it.
+                // (This matches your original design where publisher lived inside the stdin task.)
+                drop(publisher_ref);
+                let publisher_moved = publisher;
 
-                let stdin = io::stdin();
-                let mut reader = io::BufReader::new(stdin).lines();
+                tokio::spawn(async move {
+                    use tokio::io::{self, AsyncBufReadExt};
 
-                while let Some(line) = reader.next_line().await? {
-                    publisher.send_message(line.as_bytes()).await?;
-                }
-                Ok::<(), anyhow::Error>(())
-            });
+                    let stdin = io::stdin();
+                    let mut reader = io::BufReader::new(stdin).lines();
 
+                    // Separate Ctrl+C future inside the stdin task
+                    let ctrl_c_fut2 = tokio::signal::ctrl_c();
+                    tokio::pin!(ctrl_c_fut2);
+
+                    loop {
+                        tokio::select! {
+                            _ = &mut ctrl_c_fut2 => {
+                                // Exit promptly on Ctrl+C (no need for Enter)
+                                return Ok::<(), anyhow::Error>(());
+                            }
+
+                            line = reader.next_line() => {
+                                match line? {
+                                    Some(text) => {
+                                        publisher_moved.send_message(text.as_bytes()).await?;
+                                    }
+                                    None => {
+                                        // EOF
+                                        return Ok::<(), anyhow::Error>(());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                })
+            };
+
+            // Ensure we stop cleanly on either reconnect close, stdin task finish, or Ctrl+C
             let result: Result<()> = tokio::select! {
                 res = reconnect.closed() => res.map_err(Into::into),
 
-                // FIX: ensure this arm returns Result<(), anyhow::Error>
                 res = &mut stdin_task => {
+                    // stdin_task: JoinHandle<Result<(), anyhow::Error>>
                     let inner: Result<()> = res.map_err(|e| anyhow::anyhow!(e))?;
                     inner
                 },
 
                 _ = &mut ctrl_c_fut => {
+                    // stdin task should exit by itself, but aborting guarantees prompt shutdown.
                     stdin_task.abort();
                     Ok(())
                 }
@@ -221,9 +256,8 @@ async fn main() -> Result<()> {
                 .signing_public_key
                 .context("--signing-public-key is required for subscribe mode")?;
 
-            let keys =
-                ChatKeys::from_strings_public_verify(key_id, &aead_key, &signing_public)
-                    .context("failed to construct ChatKeys (public-verify)")?;
+            let keys = ChatKeys::from_strings_public_verify(key_id, &aead_key, &signing_public)
+                .context("failed to construct ChatKeys (public-verify)")?;
 
             let reconnect = client.with_subscriber(origin.clone()).reconnect(relay_url);
 
