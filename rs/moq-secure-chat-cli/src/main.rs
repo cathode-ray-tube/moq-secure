@@ -180,30 +180,30 @@ async fn main() -> Result<()> {
 
             let publisher = ChatPublisher::new(track_producer, keys);
             let reconnect = client.with_publisher(&origin).reconnect(relay_url);
-            let mut publisher = publisher;
 
-            let mut ctrl_c_fut = tokio::signal::ctrl_c();
-            tokio::pin!(ctrl_c_fut);
+            let mut publisher = publisher;
 
             use tokio::io::{self, AsyncBufReadExt};
 
-            let mut stdin_reader = {
-                let stdin = io::stdin();
-                io::BufReader::new(stdin).lines()
-            };
+            // Ctrl+C future
+            let mut ctrl_c_fut = tokio::signal::ctrl_c();
+            tokio::pin!(ctrl_c_fut);
 
-            let mut closed_fut = reconnect.closed();
+            // reconnect.closed() is !Unpin, so pin it
+            let closed_fut = reconnect.closed();
+            tokio::pin!(closed_fut);
 
-            loop {
+            let stdin = io::stdin();
+            let mut stdin_reader = io::BufReader::new(stdin).lines();
+
+            let result: Result<()> = loop {
                 tokio::select! {
                     res = &mut closed_fut => {
                         let res = res.map_err(Into::into)?;
-                        // reconnect.closed() resolves when the connection is closed
                         break res;
                     }
 
                     _ = &mut ctrl_c_fut => {
-                        // Ctrl+C: exit promptly
                         break Ok(());
                     }
 
@@ -212,17 +212,15 @@ async fn main() -> Result<()> {
                             Ok(Some(line)) => {
                                 publisher.send_message(line.as_bytes()).await?;
                             }
-                            Ok(None) => {
-                                // EOF on stdin (e.g., Ctrl+D)
-                                break Ok(());
-                            }
-                            Err(e) => {
-                                break Err(e.into());
-                            }
+                            Ok(None) => break Ok(()),   // EOF on stdin
+                            Err(e) => break Err(e.into()),
                         }
                     }
                 }
-            }
+            };
+
+            broadcast.finish();
+            result
         }
 
         Role::Subscribe => {
