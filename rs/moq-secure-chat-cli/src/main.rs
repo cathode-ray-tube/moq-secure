@@ -124,11 +124,19 @@ async fn main() -> Result<()> {
 
     match cli.role {
         Role::Publish {} => {
+            // IMPORTANT:
+            // Avoid "duplicate" errors when the relay already has the same broadcast+track/group.
+            // Safest option is to always generate a fresh track name for each publisher run.
+            //
+            // (We intentionally override --track in publish mode.)
+            let track = random_track_hex();
+
             let signing_private_seed_or_bytes =
                 cli.signing_private_seed.unwrap_or_else(gen_signing_private_seed_hex);
 
-            let keys = ChatKeys::from_strings(key_id, &aead_key, &signing_private_seed_or_bytes)
-                .context("failed to construct ChatKeys from provided/generated values")?;
+            let keys =
+                ChatKeys::from_strings(key_id, &aead_key, &signing_private_seed_or_bytes)
+                    .context("failed to construct ChatKeys from provided/generated values")?;
 
             let mut broadcast = origin
                 .create_broadcast(
@@ -226,13 +234,6 @@ async fn main() -> Result<()> {
             let mut subscriber_task: Option<tokio::task::JoinHandle<Result<()>>> = None;
 
             loop {
-                // If we have a running subscriber task, we want to wait on either:
-                // - a new broadcast/track update
-                // - the task finishing (error)
-                // - reconnect closing
-                //
-                // If we don't have one yet, we only wait on updates + reconnect closing.
-
                 if let Some(handle) = subscriber_task.take() {
                     let join_fut = async {
                         let joined: Result<(), anyhow::Error> =
