@@ -126,7 +126,7 @@ async fn main() -> Result<()> {
     let origin = Origin::random().produce();
 
     match cli.role {
-        Role::Publish {} => {
+         Role::Publish {} => {
             let signing_private_seed_or_bytes =
                 cli.signing_private_seed.unwrap_or_else(gen_signing_private_seed_hex);
 
@@ -183,65 +183,41 @@ async fn main() -> Result<()> {
 
             let mut publisher = publisher;
 
-            // Outer Ctrl+C future (used to finish the select promptly if needed)
             let mut ctrl_c_fut = tokio::signal::ctrl_c();
             tokio::pin!(ctrl_c_fut);
 
-            // Spawn stdin reader that ALSO exits on Ctrl+C (so it won't wait for a newline)
-            let mut stdin_task = {
-                let publisher_ref = &mut publisher;
-                // We can't move `publisher_ref` into the task, so instead we move `publisher` below.
-                // Therefore: create the task after moving `publisher` into it.
-                // To keep structure simple, move publisher into the task now and keep publisher only inside it.
-                // (This matches your original design where publisher lived inside the stdin task.)
-                drop(publisher_ref);
-                let publisher_moved = publisher;
+            let mut stdin_task = tokio::spawn(async move {
+                use tokio::io::{self, AsyncBufReadExt};
 
-                tokio::spawn(async move {
-                    use tokio::io::{self, AsyncBufReadExt};
+                let stdin = io::stdin();
+                let mut reader = io::BufReader::new(stdin).lines();
 
-                    let stdin = io::stdin();
-                    let mut reader = io::BufReader::new(stdin).lines();
+                // Separate Ctrl+C inside the stdin task so it can stop immediately
+                let mut ctrl_c_fut2 = tokio::signal::ctrl_c();
+                tokio::pin!(ctrl_c_fut2);
 
-                    // Separate Ctrl+C future inside the stdin task
-                    let ctrl_c_fut2 = tokio::signal::ctrl_c();
-                    tokio::pin!(ctrl_c_fut2);
-
-                    loop {
-                        tokio::select! {
-                            _ = &mut ctrl_c_fut2 => {
-                                // Exit promptly on Ctrl+C (no need for Enter)
-                                return Ok::<(), anyhow::Error>(());
-                            }
-
-                            line = reader.next_line() => {
-                                match line? {
-                                    Some(text) => {
-                                        publisher_moved.send_message(text.as_bytes()).await?;
-                                    }
-                                    None => {
-                                        // EOF
-                                        return Ok::<(), anyhow::Error>(());
-                                    }
-                                }
-                            }
+                loop {
+                    tokio::select! {
+                        _ = &mut ctrl_c_fut2 => {
+                            return Ok::<(), anyhow::Error>(());
+                        }
+                        line = reader.next_line() => {
+                            let Some(text) = line? else { return Ok::<(), anyhow::Error>(()); };
+                            publisher.send_message(text.as_bytes()).await?;
                         }
                     }
-                })
-            };
+                }
+            });
 
-            // Ensure we stop cleanly on either reconnect close, stdin task finish, or Ctrl+C
             let result: Result<()> = tokio::select! {
                 res = reconnect.closed() => res.map_err(Into::into),
 
                 res = &mut stdin_task => {
-                    // stdin_task: JoinHandle<Result<(), anyhow::Error>>
                     let inner: Result<()> = res.map_err(|e| anyhow::anyhow!(e))?;
                     inner
                 },
 
                 _ = &mut ctrl_c_fut => {
-                    // stdin task should exit by itself, but aborting guarantees prompt shutdown.
                     stdin_task.abort();
                     Ok(())
                 }
