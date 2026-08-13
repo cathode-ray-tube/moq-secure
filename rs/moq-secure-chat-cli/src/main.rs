@@ -8,29 +8,48 @@ use url::Url;
 
 #[derive(Parser, Debug, Clone)]
 struct Cli {
+    /// MoQ relay endpoint (same format as moq-native examples)
     #[arg(long)]
     relay: String,
+
+    /// Broadcast name
     #[arg(long)]
     broadcast: String,
+
+    /// Track name. Required in subscribe mode. Generated in publish mode if not supplied.
     #[arg(long)]
     track: Option<String>,
+
+    /// Disable TLS cert verification (for localhost testing; forwarded to moq-native)
     #[arg(long, default_value_t = false)]
     tls_disable_verify: bool,
+
     #[command(subcommand)]
     role: Role,
+
+    /// Optional overrides for keys (accept hex or base64 for aead key)
     #[arg(long)]
     key_id: Option<u8>,
+
     #[arg(long)]
     aead_key: Option<String>,
+
+    /// Ed25519 private key seed (preferred) as hex or base64.
+    /// Optional: if omitted, publish will generate one and print copy/paste subscribe args.
     #[arg(long)]
     signing_private_seed: Option<String>,
+
+    /// Ed25519 signing public verify key (32 bytes) as hex or base64.
+    /// Required in subscribe mode.
     #[arg(long)]
     signing_public_key: Option<String>,
 }
 
 #[derive(Subcommand, Debug, Clone)]
 enum Role {
+    /// Publish messages to the track. Reads stdin until Ctrl+C; each line is one chat message.
     Publish {},
+    /// Subscribe and print decrypted messages.
     Subscribe,
 }
 
@@ -101,20 +120,29 @@ async fn main() -> Result<()> {
     client_cfg.tls.disable_verify = Some(cli.tls_disable_verify);
     let client = client_cfg.init()?;
 
+    let origin = Origin::random().produce();
+
     match cli.role {
         Role::Publish {} => {
-            // Fresh publisher identity: create Origin INSIDE the reconnectable section.
-            // This avoids reusing frame-group identifiers across reconnect attempts.
             let signing_private_seed_or_bytes =
                 cli.signing_private_seed.unwrap_or_else(gen_signing_private_seed_hex);
 
             let keys = ChatKeys::from_strings(key_id, &aead_key, &signing_private_seed_or_bytes)
                 .context("failed to construct ChatKeys from provided/generated values")?;
 
+            let mut broadcast = origin
+                .create_broadcast(
+                    &cli.broadcast,
+                    moq_net::broadcast::Route::new().with_announce(true),
+                )
+                .context("failed to create broadcast")?;
+
+            let track_producer = broadcast
+                .create_track(track.clone(), None)
+                .context("failed to create track")?;
+
             let pwd_bin = "$(pwd)/moq-secure-chat-cli";
 
-            // NOTE: We print the subscriber command using the user-chosen broadcast/track.
-            // The internal Origin used by publisher is independent from these strings.
             let subscribe_cmd = if cli.tls_disable_verify {
                 format!(
                     "{pwd_bin} --relay {} --broadcast {} --track {} --key-id {} --aead-key {} --signing-public-key {} --tls-disable-verify subscribe",
@@ -142,63 +170,33 @@ async fn main() -> Result<()> {
             println!("=== Publisher running ===");
             println!("Type lines on stdin; each line is one chat message. Press Ctrl+C to quit.\n");
 
-            // Build reconnect future by (re)creating publisher with fresh Origin each time.
-            // If your moq_native reconnect API only takes a fixed Origin reference,
-            // this pattern is implemented by rebuilding the publisher future when reconnect closes.
-            // We loop until Ctrl+C or an error.
-            let mut attempt = 0u64;
-            loop {
-                attempt += 1;
+            let mut publisher = ChatPublisher::new(track_producer, keys);
+            let reconnect = client.with_publisher(&origin).reconnect(relay_url);
 
-                let origin = Origin::random().produce();
+            let ctrl_c = async {
+                tokio::signal::ctrl_c().await.ok();
+            };
 
-                let mut broadcast = origin
-                    .create_broadcast(
-                        &cli.broadcast,
-                        moq_net::broadcast::Route::new().with_announce(true),
-                    )
-                    .context("failed to create broadcast")?;
+            let stdin_task = async {
+                use tokio::io::{self, AsyncBufReadExt};
 
-                let track_producer = broadcast
-                    .create_track(track.clone(), None)
-                    .context("failed to create track")?;
+                let stdin = io::stdin();
+                let mut reader = io::BufReader::new(stdin).lines();
 
-                let mut publisher = ChatPublisher::new(track_producer, keys.clone());
-                let reconnect = client.with_publisher(&origin).reconnect(relay_url.clone());
-
-                let ctrl_c = async {
-                    tokio::signal::ctrl_c().await.ok();
-                };
-
-                let stdin_task = async {
-                    use tokio::io::{self, AsyncBufReadExt};
-
-                    let stdin = io::stdin();
-                    let mut reader = io::BufReader::new(stdin).lines();
-
-                    while let Some(line) = reader.next_line().await? {
-                        publisher.send_message(line.as_bytes()).await?;
-                    }
-                    Ok::<(), anyhow::Error>(())
-                };
-
-                let result = tokio::select! {
-                    res = reconnect.closed() => res.map_err(Into::into),
-                    res = stdin_task => res,
-                    _ = ctrl_c => Ok(()),
-                };
-
-                broadcast.finish();
-
-                match result {
-                    Ok(()) => return Ok(()),
-                    Err(e) => {
-                        // If reconnect closed with error, try again with fresh Origin.
-                        tracing::warn!(attempt, error = %e, "publisher run ended; retrying with fresh origin");
-                        continue;
-                    }
+                while let Some(line) = reader.next_line().await? {
+                    publisher.send_message(line.as_bytes()).await?;
                 }
-            }
+                Ok::<(), anyhow::Error>(())
+            };
+
+            let result = tokio::select! {
+                res = reconnect.closed() => res.map_err(Into::into),
+                res = stdin_task => res,
+                _ = ctrl_c => Ok(()),
+            };
+
+            broadcast.finish();
+            result
         }
 
         Role::Subscribe => {
@@ -206,11 +204,9 @@ async fn main() -> Result<()> {
                 .signing_public_key
                 .context("--signing-public-key is required for subscribe mode")?;
 
-            let keys =
-                ChatKeys::from_strings_public_verify(key_id, &aead_key, &signing_public)
-                    .context("failed to construct ChatKeys (public-verify)")?;
+            let keys = ChatKeys::from_strings_public_verify(key_id, &aead_key, &signing_public)
+                .context("failed to construct ChatKeys (public-verify)")?;
 
-            let origin = Origin::random().produce();
             let reconnect = client.with_subscriber(origin.clone()).reconnect(relay_url);
 
             let path: Path<'_> = cli.broadcast.as_str().into();
@@ -232,20 +228,25 @@ async fn main() -> Result<()> {
             loop {
                 if let Some(handle) = subscriber_task.take() {
                     let join_fut = async {
-                        let joined: Result<(), anyhow::Error> =
-                            handle.await.map_err(anyhow::Error::new)?;
-                        joined
+                        handle.await.map_err(anyhow::Error::new)?;
+                        Ok::<(), anyhow::Error>(())
                     };
 
                     tokio::select! {
                         res = reconnect.closed() => return Ok(res?),
+
+                        // If the subscriber task returns (success or error), propagate it.
                         res = join_fut => return res,
+
+                        // Announce updates can swap the track subscription; rebuild a new task.
                         Some(moq_net::announce::Update { broadcast, .. }) = origin.next() => {
                             match broadcast {
                                 Some(b) => {
                                     tracing::info!("broadcast is online, subscribing to track");
 
                                     let track_sub = b.track(&track)?.subscribe(None).await?;
+
+                                    // Start a new subscriber task for the (current) track subscription.
                                     let track_name = track.clone();
                                     let keys_clone = keys.clone();
 
@@ -266,6 +267,7 @@ async fn main() -> Result<()> {
                                 }
                                 None => {
                                     tracing::warn!("broadcast offline, waiting...");
+                                    // No subscriber task while offline.
                                     subscriber_task = None;
                                 }
                             }
@@ -274,12 +276,14 @@ async fn main() -> Result<()> {
                 } else {
                     tokio::select! {
                         res = reconnect.closed() => return Ok(res?),
+
                         Some(moq_net::announce::Update { broadcast, .. }) = origin.next() => {
                             match broadcast {
                                 Some(b) => {
                                     tracing::info!("broadcast is online, subscribing to track");
 
                                     let track_sub = b.track(&track)?.subscribe(None).await?;
+
                                     let track_name = track.clone();
                                     let keys_clone = keys.clone();
 
