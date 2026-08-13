@@ -126,7 +126,7 @@ async fn main() -> Result<()> {
     let origin = Origin::random().produce();
 
     match cli.role {
-         Role::Publish {} => {
+        Role::Publish {} => {
             let signing_private_seed_or_bytes =
                 cli.signing_private_seed.unwrap_or_else(gen_signing_private_seed_hex);
 
@@ -181,30 +181,29 @@ async fn main() -> Result<()> {
             let publisher = ChatPublisher::new(track_producer, keys);
             let reconnect = client.with_publisher(&origin).reconnect(relay_url);
 
-            let mut publisher = publisher;
-
             let mut ctrl_c_fut = tokio::signal::ctrl_c();
             tokio::pin!(ctrl_c_fut);
 
-            let mut stdin_task = tokio::spawn(async move {
+            let stdin_task = tokio::spawn(async move {
                 use tokio::io::{self, AsyncBufReadExt};
 
                 let stdin = io::stdin();
                 let mut reader = io::BufReader::new(stdin).lines();
-
-                // Separate Ctrl+C inside the stdin task so it can stop immediately
-                let mut ctrl_c_fut2 = tokio::signal::ctrl_c();
-                tokio::pin!(ctrl_c_fut2);
+                let mut publisher = publisher;
 
                 loop {
-                    tokio::select! {
-                        _ = &mut ctrl_c_fut2 => {
+                    match reader.next_line().await {
+                        Ok(Some(text)) => {
+                            if let Err(e) = publisher.send_message(text.as_bytes()).await {
+                                eprintln!("Error sending message: {}", e);
+                                return Err(e);
+                            }
+                        }
+                        Ok(None) => {
+                            // stdin closed
                             return Ok::<(), anyhow::Error>(());
                         }
-                        line = reader.next_line() => {
-                            let Some(text) = line? else { return Ok::<(), anyhow::Error>(()); };
-                            publisher.send_message(text.as_bytes()).await?;
-                        }
+                        Err(e) => return Err(e.into()),
                     }
                 }
             });
@@ -212,13 +211,12 @@ async fn main() -> Result<()> {
             let result: Result<()> = tokio::select! {
                 res = reconnect.closed() => res.map_err(Into::into),
 
-                res = &mut stdin_task => {
-                    let inner: Result<()> = res.map_err(|e| anyhow::anyhow!(e))?;
-                    inner
+                res = stdin_task => {
+                    res.map_err(|e| anyhow::anyhow!(e))??;
+                    Ok(())
                 },
 
                 _ = &mut ctrl_c_fut => {
-                    stdin_task.abort();
                     Ok(())
                 }
             };
