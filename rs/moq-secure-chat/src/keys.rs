@@ -127,7 +127,7 @@ impl ChatKeys {
     /// Verify-only constructor used by subscriber.
     ///
     /// This keeps the struct shape identical by setting `signing_private` to a dummy value.
-    /// Subscriber code must never use `signing_private` for signing (your current code doesn't).
+    /// Subscriber code must never use `signing_private` for signing.
     pub fn from_strings_public_verify(
         key_id: u8,
         aead_key_str: &str,
