@@ -18,7 +18,7 @@ When usable/performant, it will form the basis of a MOQ media player (including 
 This project is **under construction / experimentation**:
 - No working video decode/render path yet (the GLArea `connect_render` is still a stub).
 - No integration with FFmpeg / hardware decode (VAAPI) yet.
-- No QUIC playback pipeline yet.
+- No MOQ playback pipeline yet.
 - The included UI is a starter window showing a fixed-size “video box” + placeholder status.
 
 ## Run
