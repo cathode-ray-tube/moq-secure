@@ -1,9 +1,8 @@
 # linux-native-video
 
-Linux-native, low-latency video rendering experiment (GTK + OpenGL).  
-Goal: evolve into a native media player for video streaming over QUIC, using `lib moq-secure` to encrypt and sign media payloads.
+Linux-native, low-latency video rendering experiment (GTK + OpenGL).
 
-When usable/performant, it will form the basis of a MOQ media player for linux.  I will include this in my Moq-TV repo (mainly targeting Smart TVs at the moment).
+When usable/performant, it will form the basis of a MOQ media player (including encryption/signing) for linux.  I will include this in my Moq-TV repo (mainly targeting Smart TVs at the moment).
 
 ## What this is
 - A Rust project targeting Linux that uses **GTK4** and **GLArea** as the rendering surface.
