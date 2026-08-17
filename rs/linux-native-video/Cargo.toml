@@ -7,3 +7,6 @@ ffmpeg-next = "7"
 
 # GL function loading for placeholder GL rendering / texture upload
 glow = "0.13"
+
+bytemuck = { version = "1", features = ["derive"] }
+
