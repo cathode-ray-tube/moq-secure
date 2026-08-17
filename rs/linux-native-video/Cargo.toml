@@ -1,7 +1,9 @@
-[package]
-name = "linux-native-video"
-version = "0.1.0"
-edition = "2021"
-
 [dependencies]
-gtk = { version = "0.9", package = "gtk4" }
+gtk = { version = "0.8", package = "gtk4" }
+glib = "0.18"
+
+# FFmpeg bindings
+ffmpeg-next = "7"
+
+# GL function loading for placeholder GL rendering / texture upload
+glow = "0.13"
