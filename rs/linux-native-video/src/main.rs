@@ -57,14 +57,15 @@ fn main() {
         let running: Arc<Mutex<bool>> = Arc::new(Mutex::new(true));
         let running_dec = running.clone();
 
-        // Status updates back to GTK main thread
-        let (status_tx, status_rx) = glib::MainContext::channel::<String>(glib::Priority::default());
+        // Status updates
+        let (status_tx, status_rx) =
+            glib::MainContext::channel::<String>(glib::Priority::default());
         status_rx.attach(None, move |msg| {
             status.set_text(&msg);
             glib::ControlFlow::Continue
         });
 
-        // Redraw requests back to GTK main thread
+        // Redraw requests
         let drawing_for_redraw = drawing.clone();
         let (redraw_tx, redraw_rx) = glib::MainContext::channel::<()>(glib::Priority::default());
         redraw_rx.attach(None, move |_| {
@@ -119,8 +120,8 @@ fn draw_rgba_as_argb32_scaled(
     let src_w_usize = src_w as usize;
     let src_h_usize = src_h as usize;
 
-    // Build ARGB bytes for cairo ImageSurface::ARgb32
-    // (keeping your original mapping argb = [A,R,G,B])
+    // Fill ARGB bytes for cairo::ImageSurface::ARgb32
+    // Keep your mapping: argb[i+0]=A, i+1=R, i+2=G, i+3=B
     let mut argb = vec![0u8; src_w_usize * src_h_usize * 4];
     for y in 0..src_h_usize {
         for x in 0..src_w_usize {
@@ -144,7 +145,6 @@ fn draw_rgba_as_argb32_scaled(
 
     {
         let mut data = surface.data().expect("surface.data() failed");
-
         for y in 0..src_h_usize {
             let dst_off = y * stride;
             let src_off = y * row_bytes;
@@ -167,6 +167,7 @@ fn decode_loop(
     path: &str,
     running: Arc<Mutex<bool>>,
     latest: Arc<Mutex<Option<(Vec<u8>, i32, i32)>>>,
+
     status_tx: glib::Sender<String>,
     redraw_tx: glib::Sender<()>,
 ) -> Result<(), ffmpeg::Error> {
@@ -178,11 +179,25 @@ fn decode_loop(
         .ok_or(ffmpeg::Error::StreamNotFound)?;
 
     let stream_index = input_stream.index();
+    let codec_params = input_stream.parameters(); // borrowed params
 
-    // IMPORTANT CHANGE:
-    // Open the decoder using the stream's codec (not just from raw parameters).
-    // This prevents "No codec provided to avcodec_open2()".
-    let mut decoder = input_stream.codec().decoder().open()?;
+    // --- ffmpeg-next v7: open decoder using codec id + from_parameters ---
+    // `codec_params` implements Into<Parameters> but we must pass owned values as needed.
+    // Also, we need an actual codec to open.
+    //
+    // Try: get codec id from params; method name differs by minor version, so we’ll
+    // use the most common one: `codec_params.id()`.
+    let codec_id = codec_params
+        .id()
+        .ok_or(ffmpeg::Error::DecoderNotFound)?;
+
+    let decoder_codec = ffmpeg::codec::decoder::find(codec_id)
+        .ok_or(ffmpeg::Error::DecoderNotFound)?;
+
+    let mut context = ffmpeg::codec::Context::new();
+    context.set_parameters(codec_params)?;
+
+    let mut decoder = context.decoder().open_as(decoder_codec)?;
 
     let mut scaler: Option<ScalingContext> = None;
     let mut out_rgba: Video = Video::empty();
@@ -236,7 +251,7 @@ fn decode_loop(
 
             let plane0 = out_rgba.data(0);
 
-            let stride_src = out_rgba.stride(0) as usize; // bytes/row in RGBA output
+            let stride_src = out_rgba.stride(0) as usize;
             let row_bytes_dst = (width as usize) * 4;
             let height_usize = height as usize;
 
