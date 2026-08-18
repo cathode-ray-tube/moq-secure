@@ -10,7 +10,6 @@ use ffmpeg::frame::Video;
 use ffmpeg::media::Type;
 use ffmpeg::software::scaling::{context::Context as ScalingContext, flag::Flags};
 
-// Use GTK4's cairo so Context types match.
 use gtk::cairo;
 
 fn main() {
@@ -61,24 +60,25 @@ fn main() {
 
         let (tx, rx) = std::sync::mpsc::sync_channel::<(Vec<u8>, i32, i32)>(2);
 
-        // Channel for status updates back onto GTK main thread
-        let (status_tx, status_rx) = glib::MainContext::channel::<String>(glib::PRIORITY_DEFAULT);
+        // ---- Status updates channel back to GTK main thread ----
+        let (status_tx, status_rx) = glib::MainContext::channel::<String>();
 
-        if let Some(status_rx) = status_rx {
-            status_rx.attach(None, move |msg| {
-                status.set_text(&msg);
-                glib::ControlFlow::Continue
-            });
-        }
+        status_rx.attach(None, move |msg| {
+            status.set_text(&msg);
+            glib::ControlFlow::Continue
+        });
 
-        // Decoder thread (NO gtk::Label captured)
+        // ---- Decoder thread (NO GTK objects captured) ----
+        let latest_dec2 = latest_dec.clone();
         thread::spawn(move || {
-            if let Err(e) = decode_loop("bbb.mp4", tx, running_dec, latest_dec, status_tx) {
+            if let Err(e) =
+                decode_loop("bbb.mp4", tx, running_dec, latest_dec2, status_tx)
+            {
                 eprintln!("Decoder error: {e}");
             }
         });
 
-        // Draw func
+        // ---- Draw func ----
         let latest_ui = latest.clone();
         drawing.set_draw_func(move |_area, cr, _width, _height| {
             if let Some((rgba, w, h)) = latest_ui.lock().unwrap().as_ref() {
@@ -86,7 +86,7 @@ fn main() {
             }
         });
 
-        // Poll frames and redraw
+        // ---- Poll frames & queue redraw ----
         let drawing_for_redraw = drawing.clone();
         glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
             let mut got = false;
@@ -100,7 +100,7 @@ fn main() {
             glib::ControlFlow::Continue
         });
 
-        // Stop
+        // ---- Stop ----
         btn.connect_clicked(move |_| {
             if let Ok(mut v) = running.lock() {
                 *v = false;
@@ -115,7 +115,8 @@ fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, 
     let w_usize = w as usize;
     let h_usize = h as usize;
 
-    // RGBA input: [R,G,B,A] -> ARGB32 bytes layout you had:
+    // Input rgba: [R,G,B,A]
+    // Output for cairo ARGB32 with mapping:
     // argb[i+0]=A, argb[i+1]=R, argb[i+2]=G, argb[i+3]=B
     let mut argb = vec![0u8; w_usize * h_usize * 4];
     for y in 0..h_usize {
@@ -133,23 +134,23 @@ fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, 
         }
     }
 
-    let mut surface = cairo::ImageSurface::create(cairo::Format::ARgb32, w, h)
-        .expect("create ImageSurface failed");
+    let mut surface =
+        cairo::ImageSurface::create(cairo::Format::ARgb32, w, h).expect("create surface");
 
-    // Compute stride before taking mutable borrow of surface data
+    // Important: compute stride before taking mutable borrow of surface.data()
     let stride = surface.stride() as usize;
 
-    // Mutable borrow of surface data is scoped to this block
     {
         let mut data = surface.data().expect("surface.data() failed");
-        let row_bytes = w_usize * 4;
 
+        let row_bytes = w_usize * 4;
         for y in 0..h_usize {
             let dst_off = y * stride;
             let src_off = y * row_bytes;
-            data[dst_off..dst_off + row_bytes].copy_from_slice(&argb[src_off..src_off + row_bytes]);
+            data[dst_off..dst_off + row_bytes]
+                .copy_from_slice(&argb[src_off..src_off + row_bytes]);
         }
-    } // data dropped here, so we can immutably borrow surface again
+    } // data borrow ends here
 
     cr.set_source_surface(&surface, 0.0, 0.0);
     cr.paint().ok();
@@ -170,17 +171,25 @@ fn decode_loop(
         .ok_or(ffmpeg::Error::StreamNotFound)?;
 
     let stream_index = input_stream.index();
+
     let codec_params = input_stream.parameters();
 
-    // Your binding error said codec_id() doesn't exist.
-    // Use codec_params.codec() if available in your ffmpeg-next version.
-    let codec = if let Some(c) = codec_params.codec() {
-        c
-    } else {
-        return Err(ffmpeg::Error::DecoderNotFound);
+    // --- ffmpeg-next 7.1.0 bindings vary. Your errors show:
+    // codec_id() and codec() are missing on `Parameters`.
+    // So this line will NOT compile until we use the correct API for your exact build.
+    //
+    // The correct fix depends on which methods *are* available on your `Parameters`.
+    // For now, keep the rest of the pipeline correct and leave this as a clear TODO.
+    let decoder = {
+        // Try one likely method first: codec_id-like via `id()`.
+        // If this fails, paste the compile error and I’ll adjust precisely.
+        let codec_id = codec_params.id();
+        let codec = codec::decoder::find(codec_id)
+            .ok_or(ffmpeg::Error::DecoderNotFound)?;
+        codec::decoder::Decoder::open(codec)?
     };
 
-    let mut decoder = codec::decoder::Decoder::open(codec)?;
+    let mut decoder = decoder;
 
     let mut scaler: Option<ScalingContext> = None;
     let mut out_rgba: Video = Video::empty();
@@ -221,7 +230,10 @@ fn decode_loop(
                 scaler = Some(ctx);
                 out_rgba = Video::empty();
 
-                let _ = status_tx.send(format!("Status: decoding ({}x{}) ...", src_w, src_h));
+                let _ = status_tx.send(format!(
+                    "Status: decoding ({}x{}) ...",
+                    src_w, src_h
+                ));
             }
 
             let ctx = scaler.as_mut().unwrap();
@@ -234,7 +246,7 @@ fn decode_loop(
 
             let plane0 = out_rgba.data(0);
 
-            let stride_src = out_rgba.stride(0) as usize; // bytes/row
+            let stride_src = out_rgba.stride(0) as usize; // bytes/row in RGBA output
             let row_bytes_dst = (width as usize) * 4;
             let height_usize = height as usize;
 
