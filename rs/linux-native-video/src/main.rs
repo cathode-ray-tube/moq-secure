@@ -82,7 +82,7 @@ fn main() {
             }
         });
 
-        // Decoder thread (NO GTK objects captured; only sends via glib channels / shared state)
+        // Decoder thread
         thread::spawn(move || {
             if let Err(e) = decode_loop(
                 "bbb.mp4",
@@ -110,6 +110,7 @@ fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, 
     let w_usize = w as usize;
     let h_usize = h as usize;
 
+    // Input rgba: [R,G,B,A]
     // Output for cairo ARgb32 with mapping:
     // argb[i+0]=A, argb[i+1]=R, argb[i+2]=G, argb[i+3]=B
     let mut argb = vec![0u8; w_usize * h_usize * 4];
@@ -128,14 +129,16 @@ fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, 
         }
     }
 
-    let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, w, h)
-        .expect("create surface");
+    let mut surface =
+        cairo::ImageSurface::create(cairo::Format::ARgb32, w, h).expect("create surface");
     let stride = surface.stride() as usize;
 
     {
-        let mut data = surface.data().expect("surface.data() failed");
-
+        let mut data = surface
+            .data()
+            .expect("surface.data() failed (likely incompatible stride/format)");
         let row_bytes = w_usize * 4;
+
         for y in 0..h_usize {
             let dst_off = y * stride;
             let src_off = y * row_bytes;
@@ -164,7 +167,7 @@ fn decode_loop(
     let stream_index = input_stream.index();
     let codec_params = input_stream.parameters();
 
-    let mut context = ffmpeg::codec::Context::from_parameters(codec_params)?;
+    let context = ffmpeg::codec::Context::from_parameters(codec_params)?;
     let mut decoder = context.decoder().open()?;
 
     let mut scaler: Option<ScalingContext> = None;
@@ -227,7 +230,6 @@ fn decode_loop(
             let src_len = stride_src * height_usize;
             let src_slice = unsafe { std::slice::from_raw_parts(src_ptr, src_len) };
 
-            // Build rgba_bytes and MOVE it into `latest`
             let mut rgba_bytes = vec![0u8; row_bytes_dst * height_usize];
             for y in 0..height_usize {
                 let src_off = y * stride_src;
@@ -240,7 +242,6 @@ fn decode_loop(
                 *g = Some((rgba_bytes, width, height));
             }
 
-            // Request a redraw on the GTK main thread
             let _ = redraw_tx.send(());
         }
     }
