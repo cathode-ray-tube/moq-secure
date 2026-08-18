@@ -34,10 +34,8 @@ fn main() {
         let video_h: i32 = 640;
 
         let drawing = DrawingArea::new();
-        // Let GTK center/expand it properly.
         drawing.set_hexpand(true);
         drawing.set_vexpand(true);
-        // Keep a reasonable initial size hint:
         drawing.set_content_width(video_w);
         drawing.set_content_height(video_h);
 
@@ -127,7 +125,6 @@ fn draw_rgba_as_argb32_scaled(
     let src_h_usize = src_h as usize;
 
     // Convert RGBA -> BGRA bytes for cairo ARGB32 on little-endian systems.
-    // This fixes the "purple colors" symptom.
     let mut bgra = vec![0u8; src_w_usize * src_h_usize * 4];
     for y in 0..src_h_usize {
         for x in 0..src_w_usize {
@@ -183,8 +180,9 @@ fn decode_loop(
         .ok_or(ffmpeg::Error::StreamNotFound)?;
 
     let stream_index = input_stream.index();
-    let codec_params = input_stream.parameters();
+    let stream_time_base = input_stream.time_base(); // (num, den) style in ffmpeg-next
 
+    let codec_params = input_stream.parameters();
     let codec_id = codec_params.id();
     if codec_id == ffmpeg::codec::Id::None {
         return Err(ffmpeg::Error::DecoderNotFound);
@@ -200,6 +198,11 @@ fn decode_loop(
     let mut scaler: Option<ScalingContext> = None;
     let mut out_rgba: Video = Video::empty();
 
+    // --- Real-time pacing state ---
+    let mut started = false;
+    let mut start_pts: i64 = 0;
+    let mut start_instant = std::time::Instant::now();
+
     for (stream, packet) in ictx.packets() {
         if !*running.lock().unwrap() {
             break;
@@ -214,6 +217,47 @@ fn decode_loop(
         while decoder.receive_frame(&mut decoded).is_ok() {
             if !*running.lock().unwrap() {
                 break;
+            }
+
+            // Use PTS pacing (fallbacks try to handle missing timestamps)
+            let ts_opt = decoded
+                .timestamp()
+                .or_else(|| decoded.best_effort_timestamp());
+
+            // If timestamps are missing, just show ASAP for that frame.
+            // (You can add an FPS-based fallback later if needed.)
+            let ts = match ts_opt {
+                Some(t) => t,
+                None => {
+                    if !started {
+                        started = true;
+                        start_pts = 0;
+                        start_instant = std::time::Instant::now();
+                    }
+                    // no sleeping
+                    // We'll proceed immediately.
+                    0
+                }
+            };
+
+            if !started && ts_opt.is_some() {
+                started = true;
+                start_pts = ts;
+                start_instant = std::time::Instant::now();
+            }
+
+            if started && ts_opt.is_some() {
+                let elapsed_pts = ts - start_pts;
+
+                // seconds = elapsed_pts * (time_base_num / time_base_den)
+                let elapsed_secs =
+                    elapsed_pts as f64 * stream_time_base.0 as f64 / stream_time_base.1 as f64;
+
+                let target_time = start_instant + std::time::Duration::from_secs_f64(elapsed_secs.max(0.0));
+                let now = std::time::Instant::now();
+                if target_time > now {
+                    std::thread::sleep(target_time - now);
+                }
             }
 
             let src_w = decoded.width();
@@ -236,7 +280,10 @@ fn decode_loop(
                 scaler = Some(ctx);
                 out_rgba = Video::empty();
 
-                let _ = status_tx.try_send(format!("Status: decoding ({}x{}) ...", src_w, src_h));
+                let _ = status_tx.try_send(format!(
+                    "Status: decoding & playing ({}x{}) ...",
+                    src_w, src_h
+                ));
             }
 
             let ctx = scaler.as_mut().unwrap();
@@ -249,7 +296,6 @@ fn decode_loop(
             let height: i32 = height_u32.try_into().unwrap_or(0);
 
             let plane0 = out_rgba.data(0);
-
             let stride_src = out_rgba.stride(0) as usize;
             let row_bytes_dst = (width as usize) * 4;
             let height_usize = height as usize;
