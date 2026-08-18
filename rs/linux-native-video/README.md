@@ -21,7 +21,6 @@ This project is **under construction / experimentation**:
  ### Not Yet Working:
  - No integration with FFmpeg / hardware decode (VAAPI) yet.
  - No MOQ playback pipeline yet.
- - The included UI is a starter window showing a fixed-size “video box” + placeholder status.
 
 ## Run
 From main repo root:
