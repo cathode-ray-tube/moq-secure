@@ -141,11 +141,12 @@ fn draw_rgba_as_argb32_scaled(
         }
     }
 
-    let mut surface = cairo::ImageSurface::create(cairo::Format::ARgb32, src_w, src_h)
+    let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, src_w, src_h)
         .expect("create surface");
     let stride = surface.stride() as usize;
     let row_bytes = src_w_usize * 4;
 
+    // Cairo ImageSurface takes BGRA8 (on little-endian) for ARGB32.
     {
         let mut data = surface.data().expect("surface.data() failed");
         for y in 0..src_h_usize {
@@ -180,7 +181,20 @@ fn decode_loop(
         .ok_or(ffmpeg::Error::StreamNotFound)?;
 
     let stream_index = input_stream.index();
-    let stream_time_base = input_stream.time_base(); // (num, den) style in ffmpeg-next
+
+    // time_base: rational where pts * num / den = seconds
+    let time_base = input_stream.time_base();
+
+    // FPS fallback: if timestamps are missing
+    let mut fps_fallback = 0.0;
+    let avg_frame_rate = input_stream.avg_frame_rate();
+    if avg_frame_rate.1 != 0 {
+        fps_fallback = avg_frame_rate.0 as f64 / avg_frame_rate.1 as f64;
+    }
+    if fps_fallback <= 0.0 {
+        fps_fallback = 30.0;
+    }
+    let frame_duration = 1.0 / fps_fallback;
 
     let codec_params = input_stream.parameters();
     let codec_id = codec_params.id();
@@ -198,10 +212,13 @@ fn decode_loop(
     let mut scaler: Option<ScalingContext> = None;
     let mut out_rgba: Video = Video::empty();
 
-    // --- Real-time pacing state ---
+    // Pacing state
     let mut started = false;
-    let mut start_pts: i64 = 0;
     let mut start_instant = std::time::Instant::now();
+    let mut start_pts: i64 = 0;
+
+    // If timestamps are absent, pace by frame index
+    let mut frame_index: i64 = 0;
 
     for (stream, packet) in ictx.packets() {
         if !*running.lock().unwrap() {
@@ -219,47 +236,37 @@ fn decode_loop(
                 break;
             }
 
-            // Use PTS pacing (fallbacks try to handle missing timestamps)
-            let ts_opt = decoded
-                .timestamp()
-                .or_else(|| decoded.best_effort_timestamp());
-
-            // If timestamps are missing, just show ASAP for that frame.
-            // (You can add an FPS-based fallback later if needed.)
-            let ts = match ts_opt {
-                Some(t) => t,
-                None => {
-                    if !started {
-                        started = true;
-                        start_pts = 0;
-                        start_instant = std::time::Instant::now();
-                    }
-                    // no sleeping
-                    // We'll proceed immediately.
-                    0
-                }
-            };
-
-            if !started && ts_opt.is_some() {
+            if !started {
                 started = true;
-                start_pts = ts;
                 start_instant = std::time::Instant::now();
+                start_pts = decoded.timestamp().unwrap_or(0);
+                let _ = status_tx.try_send("Status: playing (timed) ...".to_string());
             }
 
-            if started && ts_opt.is_some() {
-                let elapsed_pts = ts - start_pts;
-
-                // seconds = elapsed_pts * (time_base_num / time_base_den)
+            // --- Real-time pacing ---
+            if let Some(pts) = decoded.timestamp() {
+                // elapsed_secs = (pts - start_pts) * time_base.num / time_base.den
+                let elapsed_pts = pts - start_pts;
                 let elapsed_secs =
-                    elapsed_pts as f64 * stream_time_base.0 as f64 / stream_time_base.1 as f64;
+                    (elapsed_pts as f64) * (time_base.0 as f64) / (time_base.1 as f64);
 
-                let target_time = start_instant + std::time::Duration::from_secs_f64(elapsed_secs.max(0.0));
+                let target = start_instant + std::time::Duration::from_secs_f64(elapsed_secs.max(0.0));
                 let now = std::time::Instant::now();
-                if target_time > now {
-                    std::thread::sleep(target_time - now);
+                if target > now {
+                    std::thread::sleep(target - now);
                 }
+            } else {
+                // No timestamp => fallback
+                let target_elapsed = (frame_index as f64) * frame_duration;
+                let target = start_instant + std::time::Duration::from_secs_f64(target_elapsed.max(0.0));
+                let now = std::time::Instant::now();
+                if target > now {
+                    std::thread::sleep(target - now);
+                }
+                frame_index += 1;
             }
 
+            // --- Decode -> scale -> convert to packed RGBA ---
             let src_w = decoded.width();
             let src_h = decoded.height();
 
@@ -281,7 +288,7 @@ fn decode_loop(
                 out_rgba = Video::empty();
 
                 let _ = status_tx.try_send(format!(
-                    "Status: decoding & playing ({}x{}) ...",
+                    "Status: playing ({}x{}) ...",
                     src_w, src_h
                 ));
             }
