@@ -141,18 +141,19 @@ fn draw_rgba_as_argb32_scaled(
         }
     }
 
-    let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, src_w, src_h)
-        .expect("create surface");
+    let mut surface =
+        cairo::ImageSurface::create(cairo::Format::ARgb32, src_w, src_h)
+            .expect("create surface");
     let stride = surface.stride() as usize;
     let row_bytes = src_w_usize * 4;
 
-    // Cairo ImageSurface takes BGRA8 (on little-endian) for ARGB32.
     {
         let mut data = surface.data().expect("surface.data() failed");
         for y in 0..src_h_usize {
             let dst_off = y * stride;
             let src_off = y * row_bytes;
-            data[dst_off..dst_off + row_bytes].copy_from_slice(&bgra[src_off..src_off + row_bytes]);
+            data[dst_off..dst_off + row_bytes]
+                .copy_from_slice(&bgra[src_off..src_off + row_bytes]);
         }
     }
 
@@ -181,11 +182,9 @@ fn decode_loop(
         .ok_or(ffmpeg::Error::StreamNotFound)?;
 
     let stream_index = input_stream.index();
+    let time_base = input_stream.time_base(); // seconds = pts * num / den
 
-    // time_base: rational where pts * num / den = seconds
-    let time_base = input_stream.time_base();
-
-    // FPS fallback: if timestamps are missing
+    // FPS fallback when timestamps are missing
     let mut fps_fallback = 0.0;
     let avg_frame_rate = input_stream.avg_frame_rate();
     if avg_frame_rate.1 != 0 {
@@ -245,7 +244,6 @@ fn decode_loop(
 
             // --- Real-time pacing ---
             if let Some(pts) = decoded.timestamp() {
-                // elapsed_secs = (pts - start_pts) * time_base.num / time_base.den
                 let elapsed_pts = pts - start_pts;
                 let elapsed_secs =
                     (elapsed_pts as f64) * (time_base.0 as f64) / (time_base.1 as f64);
@@ -256,7 +254,7 @@ fn decode_loop(
                     std::thread::sleep(target - now);
                 }
             } else {
-                // No timestamp => fallback
+                // No timestamp: fallback pacing
                 let target_elapsed = (frame_index as f64) * frame_duration;
                 let target = start_instant + std::time::Duration::from_secs_f64(target_elapsed.max(0.0));
                 let now = std::time::Instant::now();
@@ -266,7 +264,7 @@ fn decode_loop(
                 frame_index += 1;
             }
 
-            // --- Decode -> scale -> convert to packed RGBA ---
+            // --- Decode -> scale -> copy RGBA ---
             let src_w = decoded.width();
             let src_h = decoded.height();
 
