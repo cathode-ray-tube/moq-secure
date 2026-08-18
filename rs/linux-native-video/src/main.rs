@@ -61,7 +61,8 @@ fn main() {
         let (tx, rx) = std::sync::mpsc::sync_channel::<(Vec<u8>, i32, i32)>(2);
 
         // ---- Status updates channel back to GTK main thread ----
-        let (status_tx, status_rx) = glib::MainContext::channel::<String>();
+        let (status_tx, status_rx) =
+            glib::MainContext::channel::<String>(glib::Priority::default());
 
         status_rx.attach(None, move |msg| {
             status.set_text(&msg);
@@ -134,7 +135,7 @@ fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, 
         }
     }
 
-    let mut surface =
+    let surface =
         cairo::ImageSurface::create(cairo::Format::ARgb32, w, h).expect("create surface");
 
     // Important: compute stride before taking mutable borrow of surface.data()
@@ -171,22 +172,18 @@ fn decode_loop(
         .ok_or(ffmpeg::Error::StreamNotFound)?;
 
     let stream_index = input_stream.index();
-
     let codec_params = input_stream.parameters();
 
-    // --- ffmpeg-next 7.1.0 bindings vary. Your errors show:
-    // codec_id() and codec() are missing on `Parameters`.
-    // So this line will NOT compile until we use the correct API for your exact build.
-    //
-    // The correct fix depends on which methods *are* available on your `Parameters`.
-    // For now, keep the rest of the pipeline correct and leave this as a clear TODO.
+    // ---- ffmpeg-next 7.1.0 open() fix (E0308) ----
+    // Your error said: Decoder::open expects a Decoder (self), not a Codec.
+    // So: create a Decoder instance from the Codec, then call open() with 0 args.
     let decoder = {
-        // Try one likely method first: codec_id-like via `id()`.
-        // If this fails, paste the compile error and I’ll adjust precisely.
         let codec_id = codec_params.id();
         let codec = codec::decoder::find(codec_id)
             .ok_or(ffmpeg::Error::DecoderNotFound)?;
-        codec::decoder::Decoder::open(codec)?
+
+        let dec = codec::decoder::Decoder::new(codec)?;
+        dec.open()?
     };
 
     let mut decoder = decoder;
