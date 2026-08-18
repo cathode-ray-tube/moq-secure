@@ -14,14 +14,23 @@ When usable/performant, it will form the basis of a MOQ media player (including 
 - Planned payload protection: **lib moq-secure** (encrypt + sign media payloads)
 - Intended architecture: streaming layer (MOQ) → verified/decrypted media chunks → decoder → renderer.
 
-## Current status (NOT usable yet)
+## Current status (NOT fully usable yet)
 This project is **under construction / experimentation**:
-- No working video decode/render path yet (the GLArea `connect_render` is still a stub).
-- No integration with FFmpeg / hardware decode (VAAPI) yet.
-- No MOQ playback pipeline yet.
-- The included UI is a starter window showing a fixed-size “video box” + placeholder status.
+ ### Working:
+ - Video frame decoding and rendering.
+ ### Not Yet Working:
+ - No integration with FFmpeg / hardware decode (VAAPI) yet.
+ - No MOQ playback pipeline yet.
+ - The included UI is a starter window showing a fixed-size “video box” + placeholder status.
 
 ## Run
-Not guaranteed to build or function end-to-end yet. Once wiring is complete, typical usage will look like:
+From main repo root:
 ```bash
-cargo run
+cargo build -p linux-native-video
+```
+You need a copy of bbb.mp4 (Big Buck Bunny) in same directory as binary.
+When built (assuming bbb.mp4 is in directory):
+```bash
+cd target/debug
+./linux-native-video
+```
