@@ -1,10 +1,15 @@
+// main.rs
 use gtk::prelude::*;
 use gtk::{Application, ApplicationWindow, Box as GtkBox, GLArea, Orientation};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
-use bytemuck;
 use ffmpeg_next as ffmpeg;
+use ffmpeg::codec;
+use ffmpeg::format::input;
+use ffmpeg::frame::Video;
+use ffmpeg::media::Type;
+use ffmpeg::software::scaling::{context::Context as ScalingContext, flag::Flags};
 
 fn main() {
     ffmpeg::init().unwrap();
@@ -46,8 +51,8 @@ fn main() {
         window.set_child(Some(&root));
         window.show();
 
-        // CPU fallback frames
-        let (tx, rx) = mpsc::channel::<Vec<u8>>();
+        // Keep only the latest frame (bounded channel).
+        let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(2);
 
         let running = Arc::new(Mutex::new(true));
         let running_dec = running.clone();
@@ -65,40 +70,42 @@ fn main() {
             }
         });
 
-        // GL state (created on first render/realize)
+        // GL resources created on first render with a real GL loader from GLArea.
         let gl_state = Arc::new(Mutex::new(None::<GlResources>));
         let gl_state_render = gl_state.clone();
-        let rx_render = rx;
+
+        let rx_shared = Arc::new(Mutex::new(rx));
+        let rx_shared_render = rx_shared.clone();
 
         gl_area.connect_realize(move |area| {
             area.make_current();
         });
 
-        let rx_boxed = Arc::new(Mutex::new(rx_render));
-        let rx_boxed_render = rx_boxed.clone();
-        let gl_state_render2 = gl_state_render.clone();
-
-        gl_area.connect_render(move |area, _| {
+        gl_area.connect_render(move |area| {
             area.make_current();
 
             let w = area.size(Orientation::Horizontal).max(1) as i32;
             let h = area.size(Orientation::Vertical).max(1) as i32;
 
-            let mut gl_guard = gl_state_render2.lock().unwrap();
+            // Create GL resources once, using GL function pointers from GLArea.
+            let mut gl_guard = gl_state_render.lock().unwrap();
             if gl_guard.is_none() {
-                // IMPORTANT:
-                // Your gtk4 GLContext type in this build does not expose get_proc_address.
-                // The only way to compile without it is to use a dummy loader.
-                // This will likely fail to actually render until we wire the correct loader API.
-                let gl = unsafe { glow::Context::from_loader_function(|_s| std::ptr::null()) };
+                // glow can use GTK's proc address loader.
+                // gtk-rs GLArea provides a context that can resolve function pointers.
+                let gl = unsafe {
+                    glow::Context::from_loader_function(|s| {
+                        area.context()
+                            .expect("GLArea context missing")
+                            .get_proc_address(s) as *const _
+                    })
+                };
 
-                let res = GlResources::new(gl, w, h);
-                *gl_guard = Some(res);
+                *gl_guard = Some(GlResources::new(gl, w, h));
             }
 
-            if let Some(ref mut res) = *gl_guard {
+            if let Some(res) = gl_guard.as_mut() {
                 let latest = {
-                    let rx_lock = rx_boxed_render.lock().unwrap();
+                    let rx_lock = rx_shared_render.lock().unwrap();
                     rx_lock.try_iter().last()
                 };
 
@@ -118,16 +125,10 @@ fn main() {
 
 fn decode_and_send(
     path: &str,
-    tx: mpsc::Sender<Vec<u8>>,
+    tx: mpsc::SyncSender<Vec<u8>>,
     running: Arc<Mutex<bool>>,
     status: gtk::Label,
 ) -> Result<(), ffmpeg::Error> {
-    use ffmpeg::codec;
-    use ffmpeg::format::input;
-    use ffmpeg::frame::Video;
-    use ffmpeg::software::scaling::{context::Context as ScalingContext, flag::Flags};
-    use ffmpeg::media::Type;
-
     let mut ictx = input(&path)?;
 
     let input_stream = ictx
@@ -137,28 +138,18 @@ fn decode_and_send(
 
     let stream_index = input_stream.index();
 
-    // Your ffmpeg-next bindings: Stream::codec_id() is missing.
-    // Use codec parameters.
     let codec_params = input_stream.parameters();
-    let codec_id = codec_params
-        .codec_id()
-        .ok_or(ffmpeg::Error::DecoderNotFound)?;
+    let codec_id = codec_params.codec_id().ok_or(ffmpeg::Error::DecoderNotFound)?;
 
-    let codec = codec_id
-        .and_then(codec::decoder::find)
-        .ok_or(ffmpeg::Error::DecoderNotFound)?;
+    let codec = codec_id.and_then(codec::decoder::find).ok_or(ffmpeg::Error::DecoderNotFound)?;
 
-    // Your ffmpeg-next 7.x: codec::Context methods differ.
-    // This is the closest common API shape: create decoder from codec.
-    // If this line doesn't compile, paste the new error and we'll adapt.
     let mut decoder = codec::decoder::Decoder::open(codec)?;
 
-    // Scale decoded frame -> RGBA frame (ffmpeg-next requires frame::Video output)
     let mut scaler: Option<ScalingContext> = None;
 
-    // Output frame reused
     let mut out_rgba: Video = Video::empty();
 
+    // Queue packets by reading sequentially; when decoder yields a frame, scale it to RGBA.
     for (stream, packet) in ictx.packets() {
         if !*running.lock().unwrap() {
             break;
@@ -171,6 +162,10 @@ fn decode_and_send(
 
         let mut decoded = Video::empty();
         while decoder.receive_frame(&mut decoded).is_ok() {
+            if !*running.lock().unwrap() {
+                break;
+            }
+
             let src_w = decoded.width();
             let src_h = decoded.height();
 
@@ -191,50 +186,41 @@ fn decode_and_send(
                 scaler = Some(ctx);
                 out_rgba = Video::empty();
 
-                status.set_text(&format!("Status: decoding ({}x{}) ...", src_w, src_h));
+                status.set_text(&format!(
+                    "Status: decoding ({}x{}) ...",
+                    src_w, src_h
+                ));
             }
 
             let ctx = scaler.as_mut().unwrap();
             ctx.run(&decoded, &mut out_rgba)?;
 
-            // Copy RGBA bytes from out_rgba into Vec<u8> for GL upload
+            // Copy RGBA out_rgba into a contiguous Vec<u8>, row-by-row using stride.
             let width = out_rgba.width();
             let height = out_rgba.height();
 
-            let mut rgba_bytes = vec![0u8; (width * height * 4) as usize];
+            let stride = out_rgba.stride(0); // bytes per row for plane 0 (RGBA packed)
+            let row_bytes_src = stride as usize;
+            let row_bytes_dst = (width * 4) as usize;
 
-            // NOTE: The exact Video plane accessors can differ by ffmpeg-next version.
-            // In your earlier error, `data(0).get(y)` returned &u8, so we treat it as bytes.
-            // This assumes RGBA is packed and plane 0 contains contiguous RGBA pixels per row.
-            //
-            // If this indexing fails to compile next, paste the error and we’ll adjust to your bindings.
-            let row_bytes = (width * 4) as usize;
-            let base = out_rgba.data(0);
+            // Get plane 0 as bytes.
+            // ffmpeg-next exposes plane data via data(plane), then bytes() access.
+            let plane0 = out_rgba.data(0);
 
-            for y in 0..height {
-                for x in 0..width {
-                    let i = (y as usize) * row_bytes + (x as usize) * 4;
+            // Build a contiguous RGBA buffer with no padding.
+            let mut rgba_bytes = vec![0u8; row_bytes_dst * (height as usize)];
 
-                    // These get() calls must be adapted if your ffmpeg-next frame layout differs.
-                    // Commonly it’s RGBA as 4 bytes per pixel: R,G,B,A.
-                    //
-                    // If next compile errors happen here, paste them.
-                    rgba_bytes[i + 0] = base.get((y * width * 4 + x * 4) as usize).copied().unwrap_or(0);
-                    rgba_bytes[i + 1] = base
-                        .get((y * width * 4 + x * 4 + 1) as usize)
-                        .copied()
-                        .unwrap_or(0);
-                    rgba_bytes[i + 2] = base
-                        .get((y * width * 4 + x * 4 + 2) as usize)
-                        .copied()
-                        .unwrap_or(0);
-                    rgba_bytes[i + 3] = base
-                        .get((y * width * 4 + x * 4 + 3) as usize)
-                        .copied()
-                        .unwrap_or(0);
-                }
+            let src_ptr = plane0.as_ptr();
+            let src_slice = unsafe { std::slice::from_raw_parts(src_ptr, row_bytes_src * (height as usize)) };
+
+            for y in 0..(height as usize) {
+                let src_off = y * row_bytes_src;
+                let dst_off = y * row_bytes_dst;
+                rgba_bytes[dst_off..dst_off + row_bytes_dst]
+                    .copy_from_slice(&src_slice[src_off..src_off + row_bytes_dst]);
             }
 
+            // Send latest frame; if receiver is slow, this will block briefly (bounded queue).
             let _ = tx.send(rgba_bytes);
         }
     }
