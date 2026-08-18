@@ -51,11 +51,9 @@ fn main() {
         window.set_child(Some(&root));
         window.show();
 
-        // Latest decoded frame (written by decoder thread, read by GTK thread)
         let latest: Arc<Mutex<Option<(Vec<u8>, i32, i32)>>> = Arc::new(Mutex::new(None));
         let latest_dec = latest.clone();
 
-        // Running flag
         let running: Arc<Mutex<bool>> = Arc::new(Mutex::new(true));
         let running_dec = running.clone();
 
@@ -74,11 +72,11 @@ fn main() {
             glib::ControlFlow::Continue
         });
 
-        // Draw func reads from `latest`
+        // Draw func
         let latest_ui = latest.clone();
-        drawing.set_draw_func(move |_area, cr, _width, _height| {
+        drawing.set_draw_func(move |_area, cr, width, height| {
             if let Some((rgba, w, h)) = latest_ui.lock().unwrap().as_ref() {
-                draw_rgba_as_argb32_rgba_prefilled(cr, rgba, *w, *h);
+                draw_rgba_as_argb32_scaled(cr, rgba, *w, *h, width as i32, height as i32);
             }
         });
 
@@ -106,17 +104,27 @@ fn main() {
     app.run();
 }
 
-fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, h: i32) {
-    let w_usize = w as usize;
-    let h_usize = h as usize;
+fn draw_rgba_as_argb32_scaled(
+    cr: &cairo::Context,
+    rgba: &[u8], // [R,G,B,A]
+    src_w: i32,
+    src_h: i32,
+    dst_w: i32,
+    dst_h: i32,
+) {
+    if src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0 {
+        return;
+    }
 
-    // Input rgba: [R,G,B,A]
-    // Output for cairo ARgb32 with mapping:
-    // argb[i+0]=A, argb[i+1]=R, argb[i+2]=G, argb[i+3]=B
-    let mut argb = vec![0u8; w_usize * h_usize * 4];
-    for y in 0..h_usize {
-        for x in 0..w_usize {
-            let i = (y * w_usize + x) * 4;
+    let src_w_usize = src_w as usize;
+    let src_h_usize = src_h as usize;
+
+    // Build ARGB bytes for cairo ImageSurface::ARgb32
+    // (keeping your original mapping argb = [A,R,G,B])
+    let mut argb = vec![0u8; src_w_usize * src_h_usize * 4];
+    for y in 0..src_h_usize {
+        for x in 0..src_w_usize {
+            let i = (y * src_w_usize + x) * 4;
             let r = rgba[i + 0];
             let g = rgba[i + 1];
             let b = rgba[i + 2];
@@ -129,25 +137,30 @@ fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, 
         }
     }
 
-    let mut surface =
-        cairo::ImageSurface::create(cairo::Format::ARgb32, w, h).expect("create surface");
+    let mut surface = cairo::ImageSurface::create(cairo::Format::ARgb32, src_w, src_h)
+        .expect("create surface");
     let stride = surface.stride() as usize;
+    let row_bytes = src_w_usize * 4;
 
     {
-        let mut data = surface
-            .data()
-            .expect("surface.data() failed (likely incompatible stride/format)");
-        let row_bytes = w_usize * 4;
+        let mut data = surface.data().expect("surface.data() failed");
 
-        for y in 0..h_usize {
+        for y in 0..src_h_usize {
             let dst_off = y * stride;
             let src_off = y * row_bytes;
-            data[dst_off..dst_off + row_bytes].copy_from_slice(&argb[src_off..src_off + row_bytes]);
+            data[dst_off..dst_off + row_bytes]
+                .copy_from_slice(&argb[src_off..src_off + row_bytes]);
         }
     }
 
+    let sx = dst_w as f64 / src_w as f64;
+    let sy = dst_h as f64 / src_h as f64;
+
+    cr.save();
+    cr.scale(sx, sy);
     cr.set_source_surface(&surface, 0.0, 0.0);
     cr.paint().ok();
+    cr.restore();
 }
 
 fn decode_loop(
@@ -165,10 +178,11 @@ fn decode_loop(
         .ok_or(ffmpeg::Error::StreamNotFound)?;
 
     let stream_index = input_stream.index();
-    let codec_params = input_stream.parameters();
 
-    let context = ffmpeg::codec::Context::from_parameters(codec_params)?;
-    let mut decoder = context.decoder().open()?;
+    // IMPORTANT CHANGE:
+    // Open the decoder using the stream's codec (not just from raw parameters).
+    // This prevents "No codec provided to avcodec_open2()".
+    let mut decoder = input_stream.codec().decoder().open()?;
 
     let mut scaler: Option<ScalingContext> = None;
     let mut out_rgba: Video = Video::empty();
