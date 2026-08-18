@@ -3,7 +3,6 @@ use gtk::{Application, ApplicationWindow, Box as GtkBox, DrawingArea, Orientatio
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-// ffmpeg
 use ffmpeg_next as ffmpeg;
 use ffmpeg::codec;
 use ffmpeg::format::input;
@@ -11,7 +10,7 @@ use ffmpeg::frame::Video;
 use ffmpeg::media::Type;
 use ffmpeg::software::scaling::{context::Context as ScalingContext, flag::Flags};
 
-// IMPORTANT: Use cairo re-export from gtk4 so the Context type matches GTK's draw callback
+// Use GTK4's cairo so Context types match.
 use gtk::cairo;
 
 fn main() {
@@ -60,18 +59,26 @@ fn main() {
         let running = Arc::new(Mutex::new(true));
         let running_dec = running.clone();
 
-        let (tx, rx) =
-            std::sync::mpsc::sync_channel::<(Vec<u8>, i32, i32)>(2);
+        let (tx, rx) = std::sync::mpsc::sync_channel::<(Vec<u8>, i32, i32)>(2);
 
-        // Decoder thread
-        let status_dec = status.clone();
+        // Channel for status updates back onto GTK main thread
+        let (status_tx, status_rx) = glib::MainContext::channel::<String>(glib::PRIORITY_DEFAULT);
+
+        if let Some(status_rx) = status_rx {
+            status_rx.attach(None, move |msg| {
+                status.set_text(&msg);
+                glib::ControlFlow::Continue
+            });
+        }
+
+        // Decoder thread (NO gtk::Label captured)
         thread::spawn(move || {
-            if let Err(e) = decode_loop("bbb.mp4", tx, running_dec, status_dec, latest_dec) {
+            if let Err(e) = decode_loop("bbb.mp4", tx, running_dec, latest_dec, status_tx) {
                 eprintln!("Decoder error: {e}");
             }
         });
 
-        // Drawing
+        // Draw func
         let latest_ui = latest.clone();
         drawing.set_draw_func(move |_area, cr, _width, _height| {
             if let Some((rgba, w, h)) = latest_ui.lock().unwrap().as_ref() {
@@ -79,7 +86,7 @@ fn main() {
             }
         });
 
-        // Poll frames
+        // Poll frames and redraw
         let drawing_for_redraw = drawing.clone();
         glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
             let mut got = false;
@@ -108,8 +115,7 @@ fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, 
     let w_usize = w as usize;
     let h_usize = h as usize;
 
-    // Input rgba: [R,G,B,A]
-    // Output cairo ARGB32 (using same mapping you had):
+    // RGBA input: [R,G,B,A] -> ARGB32 bytes layout you had:
     // argb[i+0]=A, argb[i+1]=R, argb[i+2]=G, argb[i+3]=B
     let mut argb = vec![0u8; w_usize * h_usize * 4];
     for y in 0..h_usize {
@@ -127,20 +133,23 @@ fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, 
         }
     }
 
-    // Create surface with owned buffer (fix for E0597)
-    let surface =
-        cairo::ImageSurface::create(cairo::Format::ARgb32, w, h).expect("create surface");
+    let mut surface = cairo::ImageSurface::create(cairo::Format::ARgb32, w, h)
+        .expect("create ImageSurface failed");
 
-    let data = surface.data().expect("surface.data");
-    // ARGB32 stride in bytes is typically w*4, but use surface's stride:
+    // Compute stride before taking mutable borrow of surface data
     let stride = surface.stride() as usize;
 
-    for y in 0..h_usize {
-        let dst_off = y * stride;
-        let src_off = y * w_usize * 4;
-        data[dst_off..dst_off + w_usize * 4]
-            .copy_from_slice(&argb[src_off..src_off + w_usize * 4]);
-    }
+    // Mutable borrow of surface data is scoped to this block
+    {
+        let mut data = surface.data().expect("surface.data() failed");
+        let row_bytes = w_usize * 4;
+
+        for y in 0..h_usize {
+            let dst_off = y * stride;
+            let src_off = y * row_bytes;
+            data[dst_off..dst_off + row_bytes].copy_from_slice(&argb[src_off..src_off + row_bytes]);
+        }
+    } // data dropped here, so we can immutably borrow surface again
 
     cr.set_source_surface(&surface, 0.0, 0.0);
     cr.paint().ok();
@@ -150,8 +159,8 @@ fn decode_loop(
     path: &str,
     tx: std::sync::mpsc::SyncSender<(Vec<u8>, i32, i32)>,
     running: Arc<Mutex<bool>>,
-    status: gtk::Label,
     latest: Arc<Mutex<Option<(Vec<u8>, i32, i32)>>>,
+    status_tx: glib::Sender<String>,
 ) -> Result<(), ffmpeg::Error> {
     let mut ictx = input(&path)?;
 
@@ -163,11 +172,15 @@ fn decode_loop(
     let stream_index = input_stream.index();
     let codec_params = input_stream.parameters();
 
-    // Fix for E0599: use codec_id()
-    let codec_id = codec_params.codec_id();
-    let decoder_codec = codec::decoder::find(codec_id)
-        .ok_or(ffmpeg::Error::DecoderNotFound)?;
-    let mut decoder = decoder_codec.decoder().open_as(decoder_codec)?;
+    // Your binding error said codec_id() doesn't exist.
+    // Use codec_params.codec() if available in your ffmpeg-next version.
+    let codec = if let Some(c) = codec_params.codec() {
+        c
+    } else {
+        return Err(ffmpeg::Error::DecoderNotFound);
+    };
+
+    let mut decoder = codec::decoder::Decoder::open(codec)?;
 
     let mut scaler: Option<ScalingContext> = None;
     let mut out_rgba: Video = Video::empty();
@@ -208,17 +221,20 @@ fn decode_loop(
                 scaler = Some(ctx);
                 out_rgba = Video::empty();
 
-                status.set_text(&format!("Status: decoding ({}x{}) ...", src_w, src_h));
+                let _ = status_tx.send(format!("Status: decoding ({}x{}) ...", src_w, src_h));
             }
 
             let ctx = scaler.as_mut().unwrap();
             ctx.run(&decoded, &mut out_rgba)?;
 
-            let width = out_rgba.width();
-            let height = out_rgba.height();
+            let width_u32 = out_rgba.width();
+            let height_u32 = out_rgba.height();
+            let width: i32 = width_u32.try_into().unwrap_or(0);
+            let height: i32 = height_u32.try_into().unwrap_or(0);
 
             let plane0 = out_rgba.data(0);
-            let stride_src = out_rgba.stride(0) as usize;
+
+            let stride_src = out_rgba.stride(0) as usize; // bytes/row
             let row_bytes_dst = (width as usize) * 4;
             let height_usize = height as usize;
 
@@ -235,10 +251,10 @@ fn decode_loop(
             }
 
             if let Ok(mut g) = latest.lock() {
-                *g = Some((rgba_bytes.clone(), width as i32, height as i32));
+                *g = Some((rgba_bytes.clone(), width, height));
             }
 
-            let _ = tx.send((rgba_bytes, width as i32, height as i32));
+            let _ = tx.send((rgba_bytes, width, height));
         }
     }
 
