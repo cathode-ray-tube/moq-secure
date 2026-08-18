@@ -5,8 +5,6 @@ edition = "2021"
 
 [dependencies]
 gtk = { version = "0.8", package = "gtk4" }
-glib = "0.18"
-
 ffmpeg-next = "7"
+async-channel = "2"
 
-bytemuck = { version = "1", features = ["derive"] }
