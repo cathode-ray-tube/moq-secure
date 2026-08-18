@@ -7,10 +7,6 @@ edition = "2021"
 gtk = { version = "0.8", package = "gtk4" }
 glib = "0.18"
 
-# FFmpeg bindings
 ffmpeg-next = "7"
 
-cairo-rs = "0.18"
-
 bytemuck = { version = "1", features = ["derive"] }
-
