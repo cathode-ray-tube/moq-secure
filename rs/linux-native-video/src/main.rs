@@ -60,7 +60,7 @@ fn main() {
 
         let (tx, rx) = std::sync::mpsc::sync_channel::<(Vec<u8>, i32, i32)>(2);
 
-        // ---- Status updates channel back to GTK main thread ----
+        // Status updates channel back to GTK main thread
         let (status_tx, status_rx) =
             glib::MainContext::channel::<String>(glib::Priority::default());
 
@@ -69,17 +69,15 @@ fn main() {
             glib::ControlFlow::Continue
         });
 
-        // ---- Decoder thread (NO GTK objects captured) ----
+        // Decoder thread (NO GTK objects captured)
         let latest_dec2 = latest_dec.clone();
         thread::spawn(move || {
-            if let Err(e) =
-                decode_loop("bbb.mp4", tx, running_dec, latest_dec2, status_tx)
-            {
+            if let Err(e) = decode_loop("bbb.mp4", tx, running_dec, latest_dec2, status_tx) {
                 eprintln!("Decoder error: {e}");
             }
         });
 
-        // ---- Draw func ----
+        // Draw func
         let latest_ui = latest.clone();
         drawing.set_draw_func(move |_area, cr, _width, _height| {
             if let Some((rgba, w, h)) = latest_ui.lock().unwrap().as_ref() {
@@ -87,7 +85,7 @@ fn main() {
             }
         });
 
-        // ---- Poll frames & queue redraw ----
+        // Poll frames & queue redraw
         let drawing_for_redraw = drawing.clone();
         glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
             let mut got = false;
@@ -101,7 +99,7 @@ fn main() {
             glib::ControlFlow::Continue
         });
 
-        // ---- Stop ----
+        // Stop
         btn.connect_clicked(move |_| {
             if let Ok(mut v) = running.lock() {
                 *v = false;
@@ -135,10 +133,10 @@ fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, 
         }
     }
 
-    let surface =
+    let mut surface =
         cairo::ImageSurface::create(cairo::Format::ARgb32, w, h).expect("create surface");
 
-    // Important: compute stride before taking mutable borrow of surface.data()
+    // compute stride before taking mutable borrow of surface.data()
     let stride = surface.stride() as usize;
 
     {
@@ -174,19 +172,10 @@ fn decode_loop(
     let stream_index = input_stream.index();
     let codec_params = input_stream.parameters();
 
-    // ---- ffmpeg-next 7.1.0 open() fix (E0308) ----
-    // Your error said: Decoder::open expects a Decoder (self), not a Codec.
-    // So: create a Decoder instance from the Codec, then call open() with 0 args.
-    let decoder = {
-        let codec_id = codec_params.id();
-        let codec = codec::decoder::find(codec_id)
-            .ok_or(ffmpeg::Error::DecoderNotFound)?;
-
-        let dec = codec::decoder::Decoder::new(codec)?;
-        dec.open()?
-    };
-
-    let mut decoder = decoder;
+    // Build a codec context from stream parameters, then open decoder.
+    // (Fixes your earlier error: Decoder::new(...) does not exist)
+    let mut context = ffmpeg::codec::Context::from_parameters(&codec_params)?;
+    let mut decoder = context.decoder().open()?;
 
     let mut scaler: Option<ScalingContext> = None;
     let mut out_rgba: Video = Video::empty();
@@ -227,10 +216,7 @@ fn decode_loop(
                 scaler = Some(ctx);
                 out_rgba = Video::empty();
 
-                let _ = status_tx.send(format!(
-                    "Status: decoding ({}x{}) ...",
-                    src_w, src_h
-                ));
+                let _ = status_tx.send(format!("Status: decoding ({}x{}) ...", src_w, src_h));
             }
 
             let ctx = scaler.as_mut().unwrap();
