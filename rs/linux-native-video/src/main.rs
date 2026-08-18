@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use ffmpeg_next as ffmpeg;
-use ffmpeg::codec;
 use ffmpeg::format::input;
 use ffmpeg::frame::Video;
 use ffmpeg::media::Type;
@@ -136,7 +135,6 @@ fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, 
     let mut surface =
         cairo::ImageSurface::create(cairo::Format::ARgb32, w, h).expect("create surface");
 
-    // compute stride before taking mutable borrow of surface.data()
     let stride = surface.stride() as usize;
 
     {
@@ -149,7 +147,7 @@ fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, 
             data[dst_off..dst_off + row_bytes]
                 .copy_from_slice(&argb[src_off..src_off + row_bytes]);
         }
-    } // data borrow ends here
+    }
 
     cr.set_source_surface(&surface, 0.0, 0.0);
     cr.paint().ok();
@@ -172,9 +170,10 @@ fn decode_loop(
     let stream_index = input_stream.index();
     let codec_params = input_stream.parameters();
 
-    // Build a codec context from stream parameters, then open decoder.
-    // (Fixes your earlier error: Decoder::new(...) does not exist)
-    let mut context = ffmpeg::codec::Context::from_parameters(&codec_params)?;
+    // Your error says Context::from_parameters expects an owned P that can be Into<Parameters>,
+    // but &Parameters does not implement it. So pass `codec_params` by value.
+    let mut context = ffmpeg::codec::Context::from_parameters(codec_params)?;
+
     let mut decoder = context.decoder().open()?;
 
     let mut scaler: Option<ScalingContext> = None;
@@ -246,7 +245,7 @@ fn decode_loop(
             }
 
             if let Ok(mut g) = latest.lock() {
-                *g = Some((rgba_bytes.clone(), width, height));
+                *g = Some((rgba_bytes, width, height));
             }
 
             let _ = tx.send((rgba_bytes, width, height));
