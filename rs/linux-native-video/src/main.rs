@@ -51,32 +51,30 @@ fn main() {
         window.set_child(Some(&root));
         window.show();
 
+        // Latest decoded frame (written by decoder thread, read by GTK thread)
         let latest: Arc<Mutex<Option<(Vec<u8>, i32, i32)>>> = Arc::new(Mutex::new(None));
         let latest_dec = latest.clone();
 
-        let running = Arc::new(Mutex::new(true));
+        // Running flag
+        let running: Arc<Mutex<bool>> = Arc::new(Mutex::new(true));
         let running_dec = running.clone();
 
-        let (tx, rx) = std::sync::mpsc::sync_channel::<(Vec<u8>, i32, i32)>(2);
-
-        // Status updates channel back to GTK main thread
-        let (status_tx, status_rx) =
-            glib::MainContext::channel::<String>(glib::Priority::default());
-
+        // Status updates back to GTK main thread
+        let (status_tx, status_rx) = glib::MainContext::channel::<String>(glib::Priority::default());
         status_rx.attach(None, move |msg| {
             status.set_text(&msg);
             glib::ControlFlow::Continue
         });
 
-        // Decoder thread (NO GTK objects captured)
-        let latest_dec2 = latest_dec.clone();
-        thread::spawn(move || {
-            if let Err(e) = decode_loop("bbb.mp4", tx, running_dec, latest_dec2, status_tx) {
-                eprintln!("Decoder error: {e}");
-            }
+        // Redraw requests back to GTK main thread
+        let drawing_for_redraw = drawing.clone();
+        let (redraw_tx, redraw_rx) = glib::MainContext::channel::<()>(glib::Priority::default());
+        redraw_rx.attach(None, move |_| {
+            drawing_for_redraw.queue_draw();
+            glib::ControlFlow::Continue
         });
 
-        // Draw func
+        // Draw func reads from `latest`
         let latest_ui = latest.clone();
         drawing.set_draw_func(move |_area, cr, _width, _height| {
             if let Some((rgba, w, h)) = latest_ui.lock().unwrap().as_ref() {
@@ -84,18 +82,17 @@ fn main() {
             }
         });
 
-        // Poll frames & queue redraw
-        let drawing_for_redraw = drawing.clone();
-        glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
-            let mut got = false;
-            while let Ok((rgba, w, h)) = rx.try_recv() {
-                got = true;
-                *latest.lock().unwrap() = Some((rgba, w, h));
+        // Decoder thread (NO GTK objects captured; only sends via glib channels / shared state)
+        thread::spawn(move || {
+            if let Err(e) = decode_loop(
+                "bbb.mp4",
+                running_dec,
+                latest_dec,
+                status_tx,
+                redraw_tx,
+            ) {
+                eprintln!("Decoder error: {e}");
             }
-            if got {
-                drawing_for_redraw.queue_draw();
-            }
-            glib::ControlFlow::Continue
         });
 
         // Stop
@@ -113,8 +110,7 @@ fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, 
     let w_usize = w as usize;
     let h_usize = h as usize;
 
-    // Input rgba: [R,G,B,A]
-    // Output for cairo ARGB32 with mapping:
+    // Output for cairo ARgb32 with mapping:
     // argb[i+0]=A, argb[i+1]=R, argb[i+2]=G, argb[i+3]=B
     let mut argb = vec![0u8; w_usize * h_usize * 4];
     for y in 0..h_usize {
@@ -132,9 +128,8 @@ fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, 
         }
     }
 
-    let mut surface =
-        cairo::ImageSurface::create(cairo::Format::ARgb32, w, h).expect("create surface");
-
+    let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, w, h)
+        .expect("create surface");
     let stride = surface.stride() as usize;
 
     {
@@ -144,8 +139,7 @@ fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, 
         for y in 0..h_usize {
             let dst_off = y * stride;
             let src_off = y * row_bytes;
-            data[dst_off..dst_off + row_bytes]
-                .copy_from_slice(&argb[src_off..src_off + row_bytes]);
+            data[dst_off..dst_off + row_bytes].copy_from_slice(&argb[src_off..src_off + row_bytes]);
         }
     }
 
@@ -155,10 +149,10 @@ fn draw_rgba_as_argb32_rgba_prefilled(cr: &cairo::Context, rgba: &[u8], w: i32, 
 
 fn decode_loop(
     path: &str,
-    tx: std::sync::mpsc::SyncSender<(Vec<u8>, i32, i32)>,
     running: Arc<Mutex<bool>>,
     latest: Arc<Mutex<Option<(Vec<u8>, i32, i32)>>>,
     status_tx: glib::Sender<String>,
+    redraw_tx: glib::Sender<()>,
 ) -> Result<(), ffmpeg::Error> {
     let mut ictx = input(&path)?;
 
@@ -170,10 +164,7 @@ fn decode_loop(
     let stream_index = input_stream.index();
     let codec_params = input_stream.parameters();
 
-    // Your error says Context::from_parameters expects an owned P that can be Into<Parameters>,
-    // but &Parameters does not implement it. So pass `codec_params` by value.
     let mut context = ffmpeg::codec::Context::from_parameters(codec_params)?;
-
     let mut decoder = context.decoder().open()?;
 
     let mut scaler: Option<ScalingContext> = None;
@@ -236,6 +227,7 @@ fn decode_loop(
             let src_len = stride_src * height_usize;
             let src_slice = unsafe { std::slice::from_raw_parts(src_ptr, src_len) };
 
+            // Build rgba_bytes and MOVE it into `latest`
             let mut rgba_bytes = vec![0u8; row_bytes_dst * height_usize];
             for y in 0..height_usize {
                 let src_off = y * stride_src;
@@ -248,7 +240,8 @@ fn decode_loop(
                 *g = Some((rgba_bytes, width, height));
             }
 
-            let _ = tx.send((rgba_bytes, width, height));
+            // Request a redraw on the GTK main thread
+            let _ = redraw_tx.send(());
         }
     }
 
