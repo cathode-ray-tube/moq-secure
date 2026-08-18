@@ -1,6 +1,5 @@
-// main.rs
 use gtk::prelude::*;
-use gtk::{Application, ApplicationWindow, Box as GtkBox, GLArea, Orientation};
+use gtk::{Application, ApplicationWindow, Box as GtkBox, DrawingArea, Orientation};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
@@ -15,7 +14,7 @@ fn main() {
     ffmpeg::init().unwrap();
 
     let app = Application::builder()
-        .application_id("com.example.ffmpeg-vaapi-gtk-glarea")
+        .application_id("com.example.ffmpeg-gtk-cairo")
         .build();
 
     app.connect_activate(|app| {
@@ -23,7 +22,7 @@ fn main() {
             .application(app)
             .default_width(1000)
             .default_height(720)
-            .title("FFmpeg (VAAPI) + GTK GLArea (Wayland)")
+            .title("FFmpeg + GTK4 (cairo, no OpenGL)")
             .build();
 
         let root = GtkBox::new(Orientation::Horizontal, 12);
@@ -31,11 +30,15 @@ fn main() {
         let video_w: i32 = 360;
         let video_h: i32 = 640;
 
-        let gl_area = GLArea::new();
-        gl_area.set_hexpand(false);
-        gl_area.set_vexpand(false);
-        gl_area.set_size_request(video_w, video_h);
-        gl_area.set_auto_render(true);
+        let drawing = DrawingArea::new();
+        drawing.set_content_width(video_w);
+        drawing.set_content_height(video_h);
+        drawing.set_hexpand(false);
+        drawing.set_vexpand(false);
+        drawing.set_draw_func(|area, cr, width, height| {
+            // Filled in by our paint below; left blank here and we repaint via closure state.
+            let _ = (area, cr, width, height);
+        });
 
         let status = gtk::Label::new(Some("Status: decoding bbb.mp4 ..."));
         let btn = gtk::Button::with_label("Stop");
@@ -45,89 +48,114 @@ fn main() {
         side.append(&status);
         side.append(&btn);
 
-        root.append(&gl_area);
+        root.append(&drawing);
         root.append(&side);
 
         window.set_child(Some(&root));
         window.show();
 
-        // Keep only the latest frame (bounded channel).
-        let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(2);
+        // Shared latest frame
+        let latest_rgba: Arc<Mutex<Option<(Vec<u8>, i32, i32)>>> = Arc::new(Mutex::new(None));
+        let latest_rgba_dec = latest_rgba.clone();
 
         let running = Arc::new(Mutex::new(true));
         let running_dec = running.clone();
 
+        // Decode thread -> send frames occasionally; we keep only latest.
+        let (tx, rx) = std::sync::mpsc::sync_channel::<(Vec<u8>, i32, i32)>(2);
+
+        // Decode
         let status_dec = status.clone();
         thread::spawn(move || {
-            if let Err(e) = decode_and_send("bbb.mp4", tx, running_dec, status_dec) {
+            if let Err(e) = decode_loop("bbb.mp4", tx, running_dec, status_dec, latest_rgba_dec) {
                 eprintln!("Decoder error: {e}");
             }
         });
 
+        // UI timer: fetch latest decoded frame and redraw
+        let drawing_clone = drawing.clone();
+        let latest_rgba_ui = latest_rgba.clone();
+
+        glib::timeout_add_local(std::time::Duration::from_millis(16), move || {
+            // Drain channel; keep last
+            let mut got_any = false;
+            while let Ok((rgba, w, h)) = rx.try_recv() {
+                got_any = true;
+                let mut g = latest_rgba_ui.lock().unwrap();
+                *g = Some((rgba, w, h));
+            }
+
+            if got_any {
+                drawing_clone.queue_draw();
+            }
+
+            glib::ControlFlow::Continue
+        });
+
+        // Stop button
         btn.connect_clicked(move |_| {
             if let Ok(mut v) = running.lock() {
                 *v = false;
             }
         });
 
-        // GL resources created on first render with a real GL loader from GLArea.
-        let gl_state = Arc::new(Mutex::new(None::<GlResources>));
-        let gl_state_render = gl_state.clone();
+        // Actual drawing function
+        drawing.connect_draw(move |_area, cr| {
+            use cairo::prelude::*;
 
-        let rx_shared = Arc::new(Mutex::new(rx));
-        let rx_shared_render = rx_shared.clone();
+            let guard = latest_rgba.lock().unwrap();
+            if let Some((rgba, w, h)) = guard.as_ref() {
+                let w = *w;
+                let h = *h;
 
-        gl_area.connect_realize(move |area| {
-            area.make_current();
-        });
+                // Cairo expects ARGB32 in native endianness. We'll do a conversion RGBA->ARGB.
+                // Also note: cairo::Format::ARgb32 is pre-multiplied alpha; for opaque frames, it’s fine.
+                let mut argb = vec![0u8; (w as usize) * (h as usize) * 4];
+                for y in 0..h as usize {
+                    for x in 0..w as usize {
+                        let i_rgba = (y * w as usize + x) * 4;
+                        let r = rgba[i_rgba + 0];
+                        let g = rgba[i_rgba + 1];
+                        let b = rgba[i_rgba + 2];
+                        let a = rgba[i_rgba + 3];
 
-        gl_area.connect_render(move |area| {
-            area.make_current();
-
-            let w = area.size(Orientation::Horizontal).max(1) as i32;
-            let h = area.size(Orientation::Vertical).max(1) as i32;
-
-            // Create GL resources once, using GL function pointers from GLArea.
-            let mut gl_guard = gl_state_render.lock().unwrap();
-            if gl_guard.is_none() {
-                // glow can use GTK's proc address loader.
-                // gtk-rs GLArea provides a context that can resolve function pointers.
-                let gl = unsafe {
-                    glow::Context::from_loader_function(|s| {
-                        area.context()
-                            .expect("GLArea context missing")
-                            .get_proc_address(s) as *const _
-                    })
-                };
-
-                *gl_guard = Some(GlResources::new(gl, w, h));
-            }
-
-            if let Some(res) = gl_guard.as_mut() {
-                let latest = {
-                    let rx_lock = rx_shared_render.lock().unwrap();
-                    rx_lock.try_iter().last()
-                };
-
-                if let Some(rgba) = latest {
-                    res.update_texture_rgba(&rgba, w, h);
+                        // ARGB32 = [A, R, G, B]
+                        let i_argb = i_rgba;
+                        argb[i_argb + 0] = a;
+                        argb[i_argb + 1] = r;
+                        argb[i_argb + 2] = g;
+                        argb[i_argb + 3] = b;
+                    }
                 }
 
-                res.render_clear_and_draw();
+                // stride = width * 4 bytes
+                let stride = w * 4;
+                let surface = cairo::ImageSurface::create_for_data(
+                    argb.as_mut_slice(),
+                    cairo::Format::ARgb32,
+                    w,
+                    h,
+                    stride,
+                )
+                .expect("create_for_data");
+
+                cr.set_source_surface(&surface, 0.0, 0.0);
+                cr.paint().expect("paint");
             }
 
-            true.into()
+            Inhibit(false);
         });
     });
 
     app.run();
 }
 
-fn decode_and_send(
+fn decode_loop(
     path: &str,
-    tx: mpsc::SyncSender<Vec<u8>>,
+    tx: std::sync::mpsc::SyncSender<(Vec<u8>, i32, i32)>,
     running: Arc<Mutex<bool>>,
     status: gtk::Label,
+    _latest_rgba: Arc<Mutex<Option<(Vec<u8>, i32, i32)>>>,
 ) -> Result<(), ffmpeg::Error> {
     let mut ictx = input(&path)?;
 
@@ -142,14 +170,11 @@ fn decode_and_send(
     let codec_id = codec_params.codec_id().ok_or(ffmpeg::Error::DecoderNotFound)?;
 
     let codec = codec_id.and_then(codec::decoder::find).ok_or(ffmpeg::Error::DecoderNotFound)?;
-
     let mut decoder = codec::decoder::Decoder::open(codec)?;
 
     let mut scaler: Option<ScalingContext> = None;
-
     let mut out_rgba: Video = Video::empty();
 
-    // Queue packets by reading sequentially; when decoder yields a frame, scale it to RGBA.
     for (stream, packet) in ictx.packets() {
         if !*running.lock().unwrap() {
             break;
@@ -186,32 +211,28 @@ fn decode_and_send(
                 scaler = Some(ctx);
                 out_rgba = Video::empty();
 
-                status.set_text(&format!(
-                    "Status: decoding ({}x{}) ...",
-                    src_w, src_h
-                ));
+                status.set_text(&format!("Status: decoding ({}x{}) ...", src_w, src_h));
             }
 
             let ctx = scaler.as_mut().unwrap();
             ctx.run(&decoded, &mut out_rgba)?;
 
-            // Copy RGBA out_rgba into a contiguous Vec<u8>, row-by-row using stride.
             let width = out_rgba.width();
             let height = out_rgba.height();
 
-            let stride = out_rgba.stride(0); // bytes per row for plane 0 (RGBA packed)
-            let row_bytes_src = stride as usize;
-            let row_bytes_dst = (width * 4) as usize;
+            // Pull plane 0 bytes.
+            // This may include padding; we will copy row-by-row using stride.
+            let stride = out_rgba.stride(0) as usize;
+            let row_bytes_src = stride;
+            let row_bytes_dst = (width as usize) * 4;
 
-            // Get plane 0 as bytes.
-            // ffmpeg-next exposes plane data via data(plane), then bytes() access.
             let plane0 = out_rgba.data(0);
-
-            // Build a contiguous RGBA buffer with no padding.
-            let mut rgba_bytes = vec![0u8; row_bytes_dst * (height as usize)];
-
             let src_ptr = plane0.as_ptr();
-            let src_slice = unsafe { std::slice::from_raw_parts(src_ptr, row_bytes_src * (height as usize)) };
+            let src_slice = unsafe {
+                std::slice::from_raw_parts(src_ptr, row_bytes_src * (height as usize))
+            };
+
+            let mut rgba_bytes = vec![0u8; row_bytes_dst * (height as usize)];
 
             for y in 0..(height as usize) {
                 let src_off = y * row_bytes_src;
@@ -220,182 +241,9 @@ fn decode_and_send(
                     .copy_from_slice(&src_slice[src_off..src_off + row_bytes_dst]);
             }
 
-            // Send latest frame; if receiver is slow, this will block briefly (bounded queue).
-            let _ = tx.send(rgba_bytes);
+            let _ = tx.send((rgba_bytes, width, height));
         }
     }
 
     Ok(())
-}
-
-// Minimal GL resources: texture + simple draw
-struct GlResources {
-    gl: glow::Context,
-    program: glow::NativeProgram,
-    vao: glow::NativeVertexArray,
-    vbo: glow::NativeBuffer,
-    tex: glow::NativeTexture,
-    tex_w: i32,
-    tex_h: i32,
-}
-
-impl GlResources {
-    fn new(gl: glow::Context, w: i32, h: i32) -> Self {
-        unsafe {
-            let vs = gl.create_shader(glow::VERTEX_SHADER).unwrap();
-            gl.shader_source(
-                vs,
-                r#"
-                #version 330 core
-                layout (location = 0) in vec2 a_pos;
-                layout (location = 1) in vec2 a_uv;
-                out vec2 v_uv;
-                void main() {
-                    v_uv = a_uv;
-                    gl_Position = vec4(a_pos, 0.0, 1.0);
-                }
-            "#,
-            );
-            gl.compile_shader(vs);
-
-            let fs = gl.create_shader(glow::FRAGMENT_SHADER).unwrap();
-            gl.shader_source(
-                fs,
-                r#"
-                #version 330 core
-                in vec2 v_uv;
-                out vec4 out_color;
-                uniform sampler2D u_tex;
-                void main() {
-                    out_color = texture(u_tex, v_uv);
-                }
-            "#,
-            );
-            gl.compile_shader(fs);
-
-            let program = gl.create_program().unwrap();
-            gl.attach_shader(program, vs);
-            gl.attach_shader(program, fs);
-            gl.link_program(program);
-
-            gl.delete_shader(vs);
-            gl.delete_shader(fs);
-
-            let vertices: [f32; 16] = [
-                -1.0, -1.0, 0.0, 0.0, //
-                 1.0, -1.0, 1.0, 0.0, //
-                -1.0,  1.0, 0.0, 1.0, //
-                 1.0,  1.0, 1.0, 1.0, //
-            ];
-
-            let vao = gl.create_vertex_array().unwrap();
-            let vbo = gl.create_buffer().unwrap();
-
-            gl.bind_vertex_array(Some(vao));
-            gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
-            gl.buffer_data_u8_slice(
-                glow::ARRAY_BUFFER,
-                bytemuck::cast_slice(&vertices),
-                glow::STATIC_DRAW,
-            );
-
-            gl.enable_vertex_attrib_array(0);
-            gl.vertex_attrib_pointer_f32(0, 2, glow::FLOAT, false, 16, 0);
-
-            gl.enable_vertex_attrib_array(1);
-            gl.vertex_attrib_pointer_f32(1, 2, glow::FLOAT, false, 16, 8);
-
-            let tex = gl.create_texture().unwrap();
-            gl.bind_texture(glow::TEXTURE_2D, Some(tex));
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::LINEAR as i32);
-            gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::LINEAR as i32);
-
-            gl.tex_image_2d(
-                glow::TEXTURE_2D,
-                0,
-                glow::RGBA as i32,
-                w.max(1),
-                h.max(1),
-                0,
-                glow::RGBA,
-                glow::UNSIGNED_BYTE,
-                None,
-            );
-
-            gl.bind_texture(glow::TEXTURE_2D, None);
-
-            Self {
-                gl,
-                program,
-                vao,
-                vbo,
-                tex,
-                tex_w: w.max(1),
-                tex_h: h.max(1),
-            }
-        }
-    }
-
-    fn update_texture_rgba(&mut self, rgba: &[u8], w: i32, h: i32) {
-        unsafe {
-            self.gl.bind_texture(glow::TEXTURE_2D, Some(self.tex));
-
-            let ww = w.max(1);
-            let hh = h.max(1);
-
-            if ww != self.tex_w || hh != self.tex_h {
-                self.gl.tex_image_2d(
-                    glow::TEXTURE_2D,
-                    0,
-                    glow::RGBA as i32,
-                    ww,
-                    hh,
-                    0,
-                    glow::RGBA,
-                    glow::UNSIGNED_BYTE,
-                    Some(rgba),
-                );
-                self.tex_w = ww;
-                self.tex_h = hh;
-            } else {
-                self.gl.tex_sub_image_2d(
-                    glow::TEXTURE_2D,
-                    0,
-                    0,
-                    0,
-                    ww,
-                    hh,
-                    glow::RGBA,
-                    glow::UNSIGNED_BYTE,
-                    glow::PixelUnpackData::Slice(rgba),
-                );
-            }
-
-            self.gl.bind_texture(glow::TEXTURE_2D, None);
-        }
-    }
-
-    fn render_clear_and_draw(&mut self) {
-        unsafe {
-            let (w, h) = (self.tex_w, self.tex_h);
-
-            self.gl.viewport(0, 0, w, h);
-            self.gl.clear_color(0.1, 0.1, 0.12, 1.0);
-            self.gl.clear(glow::COLOR_BUFFER_BIT);
-
-            self.gl.use_program(Some(self.program));
-            self.gl.active_texture(glow::TEXTURE0);
-            self.gl.bind_texture(glow::TEXTURE_2D, Some(self.tex));
-
-            if let Some(loc) = self.gl.get_uniform_location(self.program, "u_tex") {
-                self.gl.uniform_1_i32(Some(&loc), 0);
-            }
-
-            self.gl.bind_vertex_array(Some(self.vao));
-            self.gl.draw_arrays(glow::TRIANGLE_STRIP, 0, 4);
-
-            self.gl.bind_vertex_array(None);
-            self.gl.bind_texture(glow::TEXTURE_2D, None);
-        }
-    }
 }
