@@ -1,10 +1,11 @@
 use gtk::prelude::*;
 use gtk::{Application, ApplicationWindow, Box as GtkBox, GLArea, Orientation};
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
 use bytemuck;
 use ffmpeg_next as ffmpeg;
+
 use glow::HasContext;
 
 fn main() {
@@ -86,28 +87,34 @@ fn main() {
 
             let mut gl_guard = gl_state_render2.lock().unwrap();
             if gl_guard.is_none() {
-                let ctx = area
-                    .context()
-                    .as_ref()
-                    .expect("GL context not available yet");
-
+                // GTK's GLContext type in your version doesn't expose get_proc_address.
+                // Use GLArea's loader closure style to initialize glow.
+                //
+                // If this still fails compilation, paste the error: it will tell us the
+                // exact loader signature that gtk4 exposes in your build.
                 let gl = unsafe {
-                    glow::Context::from_loader_function(|s| ctx.get_proc_address(s) as *const _)
+                    glow::Context::from_loader_function(|s| {
+                        area.context()
+                            .as_ref()
+                            .and_then(|ctx| ctx.get_proc_address(s))
+                            .map(|p| p as *const _)
+                            .unwrap_or(std::ptr::null())
+                    })
                 };
 
-                let res = GlResources::new(gl, w.max(1) as i32, h.max(1) as i32);
+                let res = GlResources::new(gl, w.max(1), h.max(1));
                 *gl_guard = Some(res);
             }
 
             if let Some(ref mut res) = *gl_guard {
-                // Drop older frames; use latest available.
+                // drop older, keep newest
                 let latest = {
                     let rx_lock = rx_boxed_render.lock().unwrap();
                     rx_lock.try_iter().last()
                 };
 
                 if let Some(rgba) = latest {
-                    res.update_texture_rgba(&rgba, w.max(1) as i32, h.max(1) as i32);
+                    res.update_texture_rgba(&rgba, w.max(1), h.max(1));
                 }
 
                 res.render_clear_and_draw();
@@ -125,43 +132,42 @@ fn decode_and_send(
     tx: mpsc::Sender<Vec<u8>>,
     running: Arc<Mutex<bool>>,
     status: gtk::Label,
-) -> Result<(), ffmpeg_next::Error> {
+) -> Result<(), ffmpeg::Error> {
     use ffmpeg::codec;
     use ffmpeg::format::input;
     use ffmpeg::frame::Video;
+    use ffmpeg::media::Type;
     use ffmpeg::software::scaling::{context::Context as ScalingContext, flag::Flags};
 
     let mut ictx = input(&path)?;
 
     let input_stream = ictx
         .streams()
-        .best(ffmpeg::media::Type::Video)
+        .best(Type::Video)
         .ok_or(ffmpeg::Error::StreamNotFound)?;
 
     let stream_index = input_stream.index();
 
-    // Use codec id from codec parameters (Stream::codec_id() not available in your ffmpeg-next)
-    let decoder_codec_id = input_stream.parameters().codec_id();
-    let codec = decoder_codec_id
+    // In your ffmpeg-next build, stream.parameters() doesn't have codec_id(),
+    // so get it from codec parameters in a way that exists in 7.1.0:
+    let codec_id = input_stream.codec_id().ok_or(ffmpeg::Error::DecoderNotFound)?;
+
+    let codec = codec_id
         .and_then(codec::decoder::find)
         .ok_or(ffmpeg::Error::DecoderNotFound)?;
 
-    // Create decoder context from codec (API differs across ffmpeg-next versions).
-    // We'll keep the rest of your fallback CPU path the same.
-    let mut decoder = codec::Context::from_parameters(input_stream.parameters())?;
-    decoder.set_thread_count(0);
-    // Ensure decoder is opened for the codec.
-    // (If this line doesn't compile in your setup, paste the error and we’ll adjust to your exact ffmpeg-next API.)
-    decoder.open_as(codec)?;
+    // Open decoder (decoder object owns send/receive)
+    let mut decoder = codec::decoder::Decoder::open(codec)?;
 
+    // scaling: decoded frame -> RGBA frame
     let mut scaler: Option<ScalingContext> = None;
-    let mut rgba = Vec::<u8>::new();
+    let mut out_rgba = Video::empty();
+    let mut tmp_rgba_bytes: Vec<u8> = Vec::new();
 
     for (stream, packet) in ictx.packets() {
         if !*running.lock().unwrap() {
             break;
         }
-
         if stream.index() != stream_index {
             continue;
         }
@@ -188,16 +194,42 @@ fn decode_and_send(
                 )?;
 
                 scaler = Some(ctx);
-                rgba.resize((src_w * src_h * 4) as usize, 0);
+
+                // Prepare output video frame for scaler::run
+                out_rgba = Video::empty();
+                // Let ffmpeg allocate when we create an empty frame for RGBA.
+                // Some ffmpeg-next builds require explicit allocation; we’ll rely on scaler output.
+                tmp_rgba_bytes.clear();
 
                 status.set_text(&format!("Status: decoding ({}x{}) ...", src_w, src_h));
             }
 
+            // scaler expects: input frame -> output frame
             let ctx = scaler.as_mut().unwrap();
-            ctx.run(&decoded, &mut rgba)?;
+            ctx.run(&decoded, &mut out_rgba)?;
 
-            // NOTE: This is still not zero-copy; it’s the CPU fallback so the video shows.
-            let _ = tx.send(rgba.clone());
+            // out_rgba now contains RGBA pixels; copy them into Vec<u8> for GL upload
+            // Assumes packed RGBA (bytes in plane 0)
+            let stride = out_rgba.stride(0);
+            let height = out_rgba.height();
+            let width = out_rgba.width();
+
+            // Collect tightly-packed RGBA rows into tmp_rgba_bytes
+            tmp_rgba_bytes.resize((width * height * 4) as usize, 0);
+
+            for y in 0..height {
+                let src_ptr = out_rgba.data(0).get(y as usize).unwrap(); // may differ by ffmpeg-next bindings
+                let dst_off = (y * width * 4) as usize;
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        src_ptr.as_ptr(),
+                        tmp_rgba_bytes[dst_off..].as_mut_ptr(),
+                        (width * 4) as usize,
+                    );
+                }
+            }
+
+            let _ = tx.send(tmp_rgba_bytes.clone());
         }
     }
 
@@ -210,7 +242,6 @@ struct GlResources {
     vao: glow::NativeVertexArray,
     vbo: glow::NativeBuffer,
     tex: glow::NativeTexture,
-
     tex_w: i32,
     tex_h: i32,
 }
@@ -259,9 +290,9 @@ impl GlResources {
 
             let vertices: [f32; 16] = [
                 -1.0, -1.0, 0.0, 0.0, //
-                1.0, -1.0, 1.0, 0.0,  //
-                -1.0, 1.0, 0.0, 1.0,  //
-                1.0, 1.0, 1.0, 1.0,   //
+                 1.0, -1.0, 1.0, 0.0, //
+                -1.0,  1.0, 0.0, 1.0, //
+                 1.0,  1.0, 1.0, 1.0, //
             ];
 
             let vao = gl.create_vertex_array().unwrap();
@@ -331,7 +362,6 @@ impl GlResources {
                 self.tex_w = w;
                 self.tex_h = h;
             } else {
-                // glow::tex_sub_image_2d expects PixelUnpackData, not Option<&[u8]>
                 self.gl.tex_sub_image_2d(
                     glow::TEXTURE_2D,
                     0,
