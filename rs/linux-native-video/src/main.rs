@@ -34,10 +34,12 @@ fn main() {
         let video_h: i32 = 640;
 
         let drawing = DrawingArea::new();
+        // Let GTK center/expand it properly.
+        drawing.set_hexpand(true);
+        drawing.set_vexpand(true);
+        // Keep a reasonable initial size hint:
         drawing.set_content_width(video_w);
         drawing.set_content_height(video_h);
-        drawing.set_hexpand(false);
-        drawing.set_vexpand(false);
 
         let status = gtk::Label::new(Some("Status: decoding bbb.mp4 ..."));
         let btn = gtk::Button::with_label("Stop");
@@ -59,7 +61,7 @@ fn main() {
         let running: Arc<Mutex<bool>> = Arc::new(Mutex::new(true));
         let running_dec = running.clone();
 
-        // Status updates
+        // Status updates (async)
         let (status_tx, status_rx): (Sender<String>, Receiver<String>) = bounded(50);
         let status_label = status.clone();
         gtk::glib::MainContext::default().spawn_local(async move {
@@ -68,7 +70,7 @@ fn main() {
             }
         });
 
-        // Redraw requests
+        // Redraw requests (async)
         let (redraw_tx, redraw_rx): (Sender<()>, Receiver<()>) = bounded(100);
         let drawing_for_redraw = drawing.clone();
         gtk::glib::MainContext::default().spawn_local(async move {
@@ -79,9 +81,9 @@ fn main() {
 
         // Draw func
         let latest_ui = latest.clone();
-        drawing.set_draw_func(move |_area, cr, _width, _height| {
+        drawing.set_draw_func(move |_area, cr, width, height| {
             if let Some((rgba, w, h)) = latest_ui.lock().unwrap().as_ref() {
-                draw_rgba_as_argb32_scaled(cr, rgba, *w, *h, _width as i32, _height as i32);
+                draw_rgba_as_argb32_scaled(cr, rgba, *w, *h, width as i32, height as i32);
             }
         });
 
@@ -124,8 +126,9 @@ fn draw_rgba_as_argb32_scaled(
     let src_w_usize = src_w as usize;
     let src_h_usize = src_h as usize;
 
-    // cairo::Format::ARgb32 expects bytes in order: A, R, G, B
-    let mut argb = vec![0u8; src_w_usize * src_h_usize * 4];
+    // Convert RGBA -> BGRA bytes for cairo ARGB32 on little-endian systems.
+    // This fixes the "purple colors" symptom.
+    let mut bgra = vec![0u8; src_w_usize * src_h_usize * 4];
     for y in 0..src_h_usize {
         for x in 0..src_w_usize {
             let i = (y * src_w_usize + x) * 4;
@@ -134,25 +137,24 @@ fn draw_rgba_as_argb32_scaled(
             let b = rgba[i + 2];
             let a = rgba[i + 3];
 
-            argb[i + 0] = a;
-            argb[i + 1] = r;
-            argb[i + 2] = g;
-            argb[i + 3] = b;
+            bgra[i + 0] = b; // B
+            bgra[i + 1] = g; // G
+            bgra[i + 2] = r; // R
+            bgra[i + 3] = a; // A
         }
     }
 
-    let mut surface =
-        cairo::ImageSurface::create(cairo::Format::ARgb32, src_w, src_h).expect("surface");
-
+    let mut surface = cairo::ImageSurface::create(cairo::Format::ARgb32, src_w, src_h)
+        .expect("create surface");
     let stride = surface.stride() as usize;
     let row_bytes = src_w_usize * 4;
 
     {
-        let mut data = surface.data().expect("surface.data()");
+        let mut data = surface.data().expect("surface.data() failed");
         for y in 0..src_h_usize {
             let dst_off = y * stride;
             let src_off = y * row_bytes;
-            data[dst_off..dst_off + row_bytes].copy_from_slice(&argb[src_off..src_off + row_bytes]);
+            data[dst_off..dst_off + row_bytes].copy_from_slice(&bgra[src_off..src_off + row_bytes]);
         }
     }
 
@@ -170,7 +172,6 @@ fn decode_loop(
     path: &str,
     running: Arc<Mutex<bool>>,
     latest: Arc<Mutex<Option<(Vec<u8>, i32, i32)>>>,
-
     status_tx: Sender<String>,
     redraw_tx: Sender<()>,
 ) -> Result<(), ffmpeg::Error> {
@@ -235,10 +236,7 @@ fn decode_loop(
                 scaler = Some(ctx);
                 out_rgba = Video::empty();
 
-                let _ = status_tx.try_send(format!(
-                    "Status: decoding ({}x{}) ...",
-                    src_w, src_h
-                ));
+                let _ = status_tx.try_send(format!("Status: decoding ({}x{}) ...", src_w, src_h));
             }
 
             let ctx = scaler.as_mut().unwrap();
@@ -260,6 +258,7 @@ fn decode_loop(
             let src_len = stride_src * height_usize;
             let src_slice = unsafe { std::slice::from_raw_parts(src_ptr, src_len) };
 
+            // Copy into tightly packed RGBA (width*4 bytes per row)
             let mut rgba_bytes = vec![0u8; row_bytes_dst * height_usize];
             for y in 0..height_usize {
                 let src_off = y * stride_src;
