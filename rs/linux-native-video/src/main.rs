@@ -11,6 +11,8 @@ use ffmpeg::software::scaling::{context::Context as ScalingContext, flag::Flags}
 
 use gtk::cairo;
 
+use async_channel::{bounded, Receiver, Sender};
+
 fn main() {
     ffmpeg::init().unwrap();
 
@@ -58,26 +60,28 @@ fn main() {
         let running_dec = running.clone();
 
         // Status updates
-        let (status_tx, status_rx) =
-            glib::MainContext::channel::<String>(glib::Priority::default());
-        status_rx.attach(None, move |msg| {
-            status.set_text(&msg);
-            glib::ControlFlow::Continue
+        let (status_tx, status_rx): (Sender<String>, Receiver<String>) = bounded(50);
+        let status_label = status.clone();
+        glib::MainContext::default().spawn_local(async move {
+            while let Ok(msg) = status_rx.recv().await {
+                status_label.set_text(&msg);
+            }
         });
 
         // Redraw requests
+        let (redraw_tx, redraw_rx): (Sender<()>, Receiver<()>) = bounded(100);
         let drawing_for_redraw = drawing.clone();
-        let (redraw_tx, redraw_rx) = glib::MainContext::channel::<()>(glib::Priority::default());
-        redraw_rx.attach(None, move |_| {
-            drawing_for_redraw.queue_draw();
-            glib::ControlFlow::Continue
+        glib::MainContext::default().spawn_local(async move {
+            while let Ok(_) = redraw_rx.recv().await {
+                drawing_for_redraw.queue_draw();
+            }
         });
 
         // Draw func
         let latest_ui = latest.clone();
-        drawing.set_draw_func(move |_area, cr, width, height| {
+        drawing.set_draw_func(move |_area, cr, _width, _height| {
             if let Some((rgba, w, h)) = latest_ui.lock().unwrap().as_ref() {
-                draw_rgba_as_argb32_scaled(cr, rgba, *w, *h, width as i32, height as i32);
+                draw_rgba_as_argb32_scaled(cr, rgba, *w, *h, _width as i32, _height as i32);
             }
         });
 
@@ -120,8 +124,7 @@ fn draw_rgba_as_argb32_scaled(
     let src_w_usize = src_w as usize;
     let src_h_usize = src_h as usize;
 
-    // Fill ARGB bytes for cairo::ImageSurface::ARgb32
-    // Keep your mapping: argb[i+0]=A, i+1=R, i+2=G, i+3=B
+    // cairo::Format::ARgb32 expects bytes in order: A, R, G, B
     let mut argb = vec![0u8; src_w_usize * src_h_usize * 4];
     for y in 0..src_h_usize {
         for x in 0..src_w_usize {
@@ -148,8 +151,7 @@ fn draw_rgba_as_argb32_scaled(
         for y in 0..src_h_usize {
             let dst_off = y * stride;
             let src_off = y * row_bytes;
-            data[dst_off..dst_off + row_bytes]
-                .copy_from_slice(&argb[src_off..src_off + row_bytes]);
+            data[dst_off..dst_off + row_bytes].copy_from_slice(&argb[src_off..src_off + row_bytes]);
         }
     }
 
@@ -168,8 +170,8 @@ fn decode_loop(
     running: Arc<Mutex<bool>>,
     latest: Arc<Mutex<Option<(Vec<u8>, i32, i32)>>>,
 
-    status_tx: glib::Sender<String>,
-    redraw_tx: glib::Sender<()>,
+    status_tx: Sender<String>,
+    redraw_tx: Sender<()>,
 ) -> Result<(), ffmpeg::Error> {
     let mut ictx = input(&path)?;
 
@@ -179,24 +181,20 @@ fn decode_loop(
         .ok_or(ffmpeg::Error::StreamNotFound)?;
 
     let stream_index = input_stream.index();
-    let codec_params = input_stream.parameters(); // borrowed params
+    let codec_params = input_stream.parameters();
 
-    // --- ffmpeg-next v7: open decoder using codec id + from_parameters ---
-    // `codec_params` implements Into<Parameters> but we must pass owned values as needed.
-    // Also, we need an actual codec to open.
-    //
-    // Try: get codec id from params; method name differs by minor version, so we’ll
-    // use the most common one: `codec_params.id()`.
-    let codec_id = codec_params
-        .id()
-        .ok_or(ffmpeg::Error::DecoderNotFound)?;
+    // In ffmpeg-next v7.1.0, codec_params.id() returns Id (not Option<Id>),
+    // so there is no .ok_or() here.
+    let codec_id = codec_params.id();
+    if codec_id == ffmpeg::codec::Id::None {
+        return Err(ffmpeg::Error::DecoderNotFound);
+    }
 
     let decoder_codec = ffmpeg::codec::decoder::find(codec_id)
         .ok_or(ffmpeg::Error::DecoderNotFound)?;
 
     let mut context = ffmpeg::codec::Context::new();
     context.set_parameters(codec_params)?;
-
     let mut decoder = context.decoder().open_as(decoder_codec)?;
 
     let mut scaler: Option<ScalingContext> = None;
@@ -238,7 +236,8 @@ fn decode_loop(
                 scaler = Some(ctx);
                 out_rgba = Video::empty();
 
-                let _ = status_tx.send(format!("Status: decoding ({}x{}) ...", src_w, src_h));
+                let _ = status_tx
+                    .try_send(format!("Status: decoding ({}x{}) ...", src_w, src_h));
             }
 
             let ctx = scaler.as_mut().unwrap();
@@ -246,6 +245,7 @@ fn decode_loop(
 
             let width_u32 = out_rgba.width();
             let height_u32 = out_rgba.height();
+
             let width: i32 = width_u32.try_into().unwrap_or(0);
             let height: i32 = height_u32.try_into().unwrap_or(0);
 
@@ -259,6 +259,7 @@ fn decode_loop(
             let src_len = stride_src * height_usize;
             let src_slice = unsafe { std::slice::from_raw_parts(src_ptr, src_len) };
 
+            // Make output tightly packed RGBA (width*4 bytes per row)
             let mut rgba_bytes = vec![0u8; row_bytes_dst * height_usize];
             for y in 0..height_usize {
                 let src_off = y * stride_src;
@@ -271,7 +272,7 @@ fn decode_loop(
                 *g = Some((rgba_bytes, width, height));
             }
 
-            let _ = redraw_tx.send(());
+            let _ = redraw_tx.try_send(());
         }
     }
 
