@@ -62,7 +62,7 @@ fn main() {
         // Status updates
         let (status_tx, status_rx): (Sender<String>, Receiver<String>) = bounded(50);
         let status_label = status.clone();
-        glib::MainContext::default().spawn_local(async move {
+        gtk::glib::MainContext::default().spawn_local(async move {
             while let Ok(msg) = status_rx.recv().await {
                 status_label.set_text(&msg);
             }
@@ -71,7 +71,7 @@ fn main() {
         // Redraw requests
         let (redraw_tx, redraw_rx): (Sender<()>, Receiver<()>) = bounded(100);
         let drawing_for_redraw = drawing.clone();
-        glib::MainContext::default().spawn_local(async move {
+        gtk::glib::MainContext::default().spawn_local(async move {
             while let Ok(_) = redraw_rx.recv().await {
                 drawing_for_redraw.queue_draw();
             }
@@ -141,13 +141,14 @@ fn draw_rgba_as_argb32_scaled(
         }
     }
 
-    let mut surface = cairo::ImageSurface::create(cairo::Format::ARgb32, src_w, src_h)
-        .expect("create surface");
+    let mut surface =
+        cairo::ImageSurface::create(cairo::Format::ARgb32, src_w, src_h).expect("surface");
+
     let stride = surface.stride() as usize;
     let row_bytes = src_w_usize * 4;
 
     {
-        let mut data = surface.data().expect("surface.data() failed");
+        let mut data = surface.data().expect("surface.data()");
         for y in 0..src_h_usize {
             let dst_off = y * stride;
             let src_off = y * row_bytes;
@@ -183,8 +184,6 @@ fn decode_loop(
     let stream_index = input_stream.index();
     let codec_params = input_stream.parameters();
 
-    // In ffmpeg-next v7.1.0, codec_params.id() returns Id (not Option<Id>),
-    // so there is no .ok_or() here.
     let codec_id = codec_params.id();
     if codec_id == ffmpeg::codec::Id::None {
         return Err(ffmpeg::Error::DecoderNotFound);
@@ -236,8 +235,10 @@ fn decode_loop(
                 scaler = Some(ctx);
                 out_rgba = Video::empty();
 
-                let _ = status_tx
-                    .try_send(format!("Status: decoding ({}x{}) ...", src_w, src_h));
+                let _ = status_tx.try_send(format!(
+                    "Status: decoding ({}x{}) ...",
+                    src_w, src_h
+                ));
             }
 
             let ctx = scaler.as_mut().unwrap();
@@ -259,7 +260,6 @@ fn decode_loop(
             let src_len = stride_src * height_usize;
             let src_slice = unsafe { std::slice::from_raw_parts(src_ptr, src_len) };
 
-            // Make output tightly packed RGBA (width*4 bytes per row)
             let mut rgba_bytes = vec![0u8; row_bytes_dst * height_usize];
             for y in 0..height_usize {
                 let src_off = y * stride_src;
