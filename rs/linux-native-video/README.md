@@ -7,7 +7,7 @@ When usable/performant, it will form the basis of a MOQ media player (including 
 ## What this is
 - A Rust project targeting Linux that uses **GTK4** and **Cairo** for rendering.
 - Current pipeline is a real video decoder/player from an mp4 file.
-- Next steps will use GPU textures and MOQ transport and MOQ-Secure.
+- Next steps will use GPU textures, MOQ transport and MOQ-Secure.
 - Then look at supporting multiple graphics stacks.
 
 ## Security / streaming direction
