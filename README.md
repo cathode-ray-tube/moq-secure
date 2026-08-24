@@ -36,7 +36,7 @@ cd moq-secure
 cargo build -p moq-secure-chat-cli
 ```
 
-Run (for details of args run with ```-help```):
+Run:
 
 ```bash
 cd rs/target/debug
