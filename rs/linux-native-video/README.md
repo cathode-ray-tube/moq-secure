@@ -10,7 +10,7 @@ When usable/performant, it will form the basis of a MOQ media player (including 
 
 ## Security / streaming direction
 - Transport: **Media Over Quic (MOQ)**
-- Planned payload protection: **lib moq-secure** (encrypt + sign media payloads)
+- Planned payload protection: **moq-secure** (encrypt + sign media payloads)
 - Intended architecture: streaming layer (MOQ) → verified/decrypted media chunks → decoder → renderer.
 
 ## Current status
