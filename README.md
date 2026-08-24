@@ -32,7 +32,6 @@ Build:
 
 ```bash
 cd moq-secure
-
 cargo build -p moq-secure-chat-cli
 ```
 
@@ -40,7 +39,6 @@ Run:
 
 ```bash
 cd target/debug
-
 ./moq-secure-chat-cli --relay https://localhost:4443/chat --broadcast chat --tls-disable-verify publish
 ```
 In a second terminal, paste the displayed command to run the binary in subscriber mode and receive sent messages.
