@@ -9,7 +9,7 @@ When usable/performant, it will form the basis of a MOQ media player (including 
 - Current pipeline is a real video decoder/player, connecting to a MOQ Relay and playing audio/video.
 
 ## Security / streaming direction
-- Planned transport: **Media Over Quic (MOQ)**
+- Transport: **Media Over Quic (MOQ)**
 - Planned payload protection: **lib moq-secure** (encrypt + sign media payloads)
 - Intended architecture: streaming layer (MOQ) → verified/decrypted media chunks → decoder → renderer.
 
