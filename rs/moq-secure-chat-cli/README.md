@@ -1,6 +1,8 @@
-## Quick Start (moq-secure-chat-cli):
+## moq-secure-chat-cli
 
 This demonstrates moq-secure end-to-end encryption and signing of text chat messages in the terminal.
+
+## Quick Start:
 
 First, install and run a moq-relay from the moq repo, instructions [here](https://github.com/moq-dev/moq/tree/main/rs/moq-relay).
 
