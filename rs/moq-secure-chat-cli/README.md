@@ -2,7 +2,7 @@
 
 This demonstrates moq-secure end-to-end encryption and signing of text chat messages in the terminal.
 
-## Quick Start:
+## Run:
 
 First, install and run a moq-relay from the moq repo, instructions [here](https://github.com/moq-dev/moq/tree/main/rs/moq-relay).
 
