@@ -22,23 +22,25 @@ This demonstrates moq-secure end-to-end encryption and signing of text chat mess
 
 First, install and run a moq-relay from the moq repo, instructions [here](https://github.com/moq-dev/moq/tree/main/rs/moq-relay).
 
-Clone this repo:
+Clone:
 
 ```bash
 git clone https://github.com/cathode-ray-tube/moq-secure.git
+```
 
-cd moq-secure/rs
+Build:
+
+```bash
+cd moq-secure
 
 cargo build -p moq-secure-chat-cli
 ```
-Build binary:
+
+Run (for details of args run with ```-help```):
 
 ```bash
-cd target/debug
-```
-Run:
+cd rs/target/debug
 
-```bash
 ./moq-secure-chat-cli
 ```
 In a second terminal, paste the displayed command to run the binary in subscriber mode and receive sent messages.
