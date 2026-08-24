@@ -1,330 +1,548 @@
-use gtk::prelude::*;
-use gtk::{Application, ApplicationWindow, Box as GtkBox, DrawingArea, Orientation};
-use std::sync::{Arc, Mutex};
-use std::thread;
+use std::{process, rc::Rc, time::Duration};
 
-use ffmpeg_next as ffmpeg;
-use ffmpeg::format::input;
-use ffmpeg::frame::Video;
-use ffmpeg::media::Type;
-use ffmpeg::software::scaling::{context::Context as ScalingContext, flag::Flags};
+use gtk4 as gtk;
+use gtk::{glib, prelude::*};
 
-use gtk::cairo;
+use gstreamer as gst;
+use gst::prelude::*;
 
-use async_channel::{bounded, Receiver, Sender};
+const MOQ_URL: &str = "https://cdn.moq.dev/demo";
+const MOQ_BROADCAST: &str = "bbb.hang";
+
+// Positive value delays audio.
+// Negative value advances audio.
+const AUDIO_TS_OFFSET_NS: i64 = 0;
+
+struct Player {
+    pipeline: gst::Pipeline,
+    video_sink: gst::Element,
+}
+
+impl Player {
+    fn new(url: &str, broadcast: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let pipeline = gst::Pipeline::new();
+
+        let source = gst::ElementFactory::make("moqsrc")
+            .property("url", url)
+            .property("broadcast", broadcast)
+            .build()?;
+
+        // -------------------------------------------------------------
+        // Video elements
+        // -------------------------------------------------------------
+
+        let video_parser = gst::ElementFactory::make("h264parse")
+            .property("config-interval", 1i32)
+            .build()?;
+
+        // Decouples the MoQ source/parser from the video decoder.
+        let video_queue = gst::ElementFactory::make("queue")
+            .property("max-size-time", 500_000_000u64)
+            .property("max-size-buffers", 0u32)
+            .property("max-size-bytes", 0u32)
+            .build()?;
+
+        video_queue.set_property_from_str("leaky", "no");
+
+        let video_decoder = gst::ElementFactory::make("decodebin3").build()?;
+
+        // Decouples decoding from conversion and GTK rendering.
+        let decoded_video_queue = gst::ElementFactory::make("queue")
+            .property("max-size-time", 500_000_000u64)
+            .property("max-size-buffers", 0u32)
+            .property("max-size-bytes", 0u32)
+            .build()?;
+
+        decoded_video_queue.set_property_from_str("leaky", "no");
+
+        let video_convert = gst::ElementFactory::make("videoconvert").build()?;
+
+        // Set sync=false while diagnosing live-stream timestamp problems.
+        // Once playback is stable, try changing both sync properties to true.
+        let video_sink = gst::ElementFactory::make("gtk4paintablesink")
+            .property("sync", false)
+            .property("async", false)
+            .build()
+            .map_err(|e| format!("Could not create gtk4paintablesink: {e}"))?;
+
+        // -------------------------------------------------------------
+        // Audio elements
+        // -------------------------------------------------------------
+
+        let audio_parser = gst::ElementFactory::make("aacparse").build()?;
+
+        let audio_decoder = gst::ElementFactory::make("decodebin3").build()?;
+
+        let audio_queue = gst::ElementFactory::make("queue")
+            .property("max-size-time", 500_000_000u64)
+            .property("max-size-buffers", 0u32)
+            .property("max-size-bytes", 0u32)
+            .build()?;
+
+        audio_queue.set_property_from_str("leaky", "no");
+
+        let audio_convert = gst::ElementFactory::make("audioconvert").build()?;
+
+        let audio_resample = gst::ElementFactory::make("audioresample")
+            .property("quality", 10i32)
+            .build()?;
+
+        let audio_caps = gst::ElementFactory::make("capsfilter")
+            .property(
+                "caps",
+                gst::Caps::builder("audio/x-raw")
+                    .field("format", "S16LE")
+                    .field("layout", "interleaved")
+                    .field("rate", 48_000i32)
+                    .field("channels", 2i32)
+                    .build(),
+            )
+            .build()?;
+
+        let audio_volume = gst::ElementFactory::make("volume")
+            .property("volume", 0.7f64)
+            .build()?;
+
+        let audio_sink = gst::ElementFactory::make("pipewiresink")
+            .property("sync", true)
+            .property("async", true)
+            .property("ts-offset", AUDIO_TS_OFFSET_NS)
+            .build()
+            .map_err(|e| format!("Could not create pipewiresink: {e}"))?;
+
+        // -------------------------------------------------------------
+        // Add elements
+        // -------------------------------------------------------------
+
+        pipeline.add_many([
+            &source,
+
+            // Video
+            &video_parser,
+            &video_queue,
+            &video_decoder,
+            &decoded_video_queue,
+            &video_convert,
+            &video_sink,
+
+            // Audio
+            &audio_parser,
+            &audio_decoder,
+            &audio_queue,
+            &audio_convert,
+            &audio_resample,
+            &audio_caps,
+            &audio_volume,
+            &audio_sink,
+        ])?;
+
+        // -------------------------------------------------------------
+        // Static links
+        // -------------------------------------------------------------
+
+        // Encoded video:
+        // moqsrc → h264parse → queue → decodebin3
+        gst::Element::link_many([
+            &video_parser,
+            &video_queue,
+            &video_decoder,
+        ])?;
+
+        // Decoded video:
+        // decoded queue → videoconvert → gtk4paintablesink
+        gst::Element::link_many([
+            &decoded_video_queue,
+            &video_convert,
+            &video_sink,
+        ])?;
+
+        // Encoded audio:
+        // moqsrc → aacparse → decodebin3
+        gst::Element::link_many([
+            &audio_parser,
+            &audio_decoder,
+        ])?;
+
+        // Decoded audio:
+        // queue → audioconvert → audioresample → capsfilter
+        //       → volume → pipewiresink
+        gst::Element::link_many([
+            &audio_queue,
+            &audio_convert,
+            &audio_resample,
+            &audio_caps,
+            &audio_volume,
+            &audio_sink,
+        ])?;
+
+        // -------------------------------------------------------------
+        // Route dynamic pads from moqsrc
+        // -------------------------------------------------------------
+
+        let video_parser_weak = video_parser.downgrade();
+        let audio_parser_weak = audio_parser.downgrade();
+
+        source.connect_pad_added(move |_source, pad| {
+            if pad.is_linked() {
+                return;
+            }
+
+            let caps = pad
+                .current_caps()
+                .unwrap_or_else(|| pad.query_caps(None));
+
+            let Some(structure) = caps.structure(0) else {
+                eprintln!("MoQ pad has no caps: {caps}");
+                return;
+            };
+
+            let media_type = structure.name();
+
+            let target = if media_type.starts_with("video/") {
+                let Some(parser) = video_parser_weak.upgrade() else {
+                    return;
+                };
+
+                parser
+            } else if media_type.starts_with("audio/") {
+                let Some(parser) = audio_parser_weak.upgrade() else {
+                    return;
+                };
+
+                parser
+            } else {
+                eprintln!("Ignoring unsupported MoQ caps: {caps}");
+                return;
+            };
+
+            let Some(target_sink) = target.static_pad("sink") else {
+                eprintln!("Target has no sink pad for {media_type}");
+                return;
+            };
+
+            if target_sink.is_linked() {
+                eprintln!("Target sink is already linked: {media_type}");
+                return;
+            }
+
+            match pad.link(&target_sink) {
+                Ok(_) => {
+                    println!("Linked MoQ {media_type} pad");
+                }
+
+                Err(error) => {
+                    eprintln!("Could not link MoQ {media_type} pad: {error}");
+                }
+            }
+        });
+
+        // -------------------------------------------------------------
+        // Route decoded video pads
+        // -------------------------------------------------------------
+
+        let decoded_video_queue_weak = decoded_video_queue.downgrade();
+
+        video_decoder.connect_pad_added(move |_decoder, pad| {
+            let caps = pad
+                .current_caps()
+                .unwrap_or_else(|| pad.query_caps(None));
+
+            println!("Decoded video pad {} caps: {caps}", pad.name());
+
+            let Some(structure) = caps.structure(0) else {
+                eprintln!("Decoded video pad has no caps");
+                return;
+            };
+
+            if !structure.name().starts_with("video/") {
+                return;
+            }
+
+            let Some(decoded_video_queue) = decoded_video_queue_weak.upgrade() else {
+                return;
+            };
+
+            let Some(sink_pad) = decoded_video_queue.static_pad("sink") else {
+                eprintln!("Decoded video queue has no sink pad");
+                return;
+            };
+
+            if sink_pad.is_linked() {
+                eprintln!("Decoded video queue sink pad is already linked");
+                return;
+            }
+
+            match pad.link(&sink_pad) {
+                Ok(_) => {
+                    println!("Linked decoded video to video queue");
+                }
+
+                Err(error) => {
+                    eprintln!("Could not link decoded video: {error}");
+                }
+            }
+        });
+
+        // -------------------------------------------------------------
+        // Route decoded audio pads
+        // -------------------------------------------------------------
+
+        let audio_queue_weak = audio_queue.downgrade();
+
+        audio_decoder.connect_pad_added(move |_decoder, pad| {
+            let caps = pad
+                .current_caps()
+                .unwrap_or_else(|| pad.query_caps(None));
+
+            println!("Decoded audio pad {} caps: {caps}", pad.name());
+
+            let Some(structure) = caps.structure(0) else {
+                eprintln!("Decoded audio pad has no caps");
+                return;
+            };
+
+            if !structure.name().starts_with("audio/") {
+                return;
+            }
+
+            let Some(audio_queue) = audio_queue_weak.upgrade() else {
+                return;
+            };
+
+            let Some(sink_pad) = audio_queue.static_pad("sink") else {
+                eprintln!("Audio queue has no sink pad");
+                return;
+            };
+
+            if sink_pad.is_linked() {
+                eprintln!("Audio queue sink pad is already linked");
+                return;
+            }
+
+            match pad.link(&sink_pad) {
+                Ok(_) => {
+                    println!("Linked decoded audio to audio queue");
+                }
+
+                Err(error) => {
+                    eprintln!("Could not link decoded audio: {error}");
+                }
+            }
+        });
+
+        Ok(Self {
+            pipeline,
+            video_sink,
+        })
+    }
+
+    fn play(&self) {
+        if let Err(error) = self.pipeline.set_state(gst::State::Playing) {
+            eprintln!("Could not start playback: {error}");
+        }
+    }
+
+    fn stop(&self) {
+        if let Err(error) = self.pipeline.set_state(gst::State::Null) {
+            eprintln!("Could not stop playback: {error}");
+        }
+    }
+
+    fn paintable(&self) -> Option<gtk::gdk::Paintable> {
+        self.video_sink
+            .property::<Option<gtk::gdk::Paintable>>("paintable")
+    }
+
+    fn install_bus_watch(&self, app: &gtk::Application) {
+        let Some(bus) = self.pipeline.bus() else {
+            eprintln!("Pipeline has no bus");
+            return;
+        };
+
+        let app = app.clone();
+
+        bus.add_watch_local(move |_bus, message| {
+            use gst::MessageView;
+
+            match message.view() {
+                MessageView::Error(error) => {
+                    let source = error
+                        .src()
+                        .map(|src| src.path_string().to_string())
+                        .unwrap_or_else(|| "<unknown>".to_string());
+
+                    eprintln!(
+                        "GStreamer error from {source}: {}",
+                        error.error()
+                    );
+
+                    if let Some(debug) = error.debug() {
+                        eprintln!("Debug: {debug}");
+                    }
+
+                    app.quit();
+                }
+
+                MessageView::Warning(warning) => {
+                    let source = warning
+                        .src()
+                        .map(|src| src.path_string().to_string())
+                        .unwrap_or_else(|| "<unknown>".to_string());
+
+                    eprintln!(
+                        "GStreamer warning from {source}: {}",
+                        warning.error()
+                    );
+
+                    if let Some(debug) = warning.debug() {
+                        eprintln!("Debug: {debug}");
+                    }
+                }
+
+                MessageView::Eos(..) => {
+                    println!("End of stream");
+                    app.quit();
+                }
+
+                _ => {}
+            }
+
+            glib::ControlFlow::Continue
+        })
+        .expect("Could not install GStreamer bus watch");
+    }
+}
+
+impl Drop for Player {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+fn build_ui(app: &gtk::Application, player: Rc<Player>) {
+    let window = gtk::ApplicationWindow::builder()
+        .application(app)
+        .title("MoQ GStreamer Player")
+        .default_width(1280)
+        .default_height(720)
+        .build();
+
+    let root = gtk::Box::new(gtk::Orientation::Vertical, 8);
+
+    let picture = gtk::Picture::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .can_shrink(true)
+        .keep_aspect_ratio(true)
+        .build();
+
+    let controls = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+
+    let play_button = gtk::Button::with_label("Play");
+    let stop_button = gtk::Button::with_label("Stop");
+    let quit_button = gtk::Button::with_label("Quit");
+
+    {
+        let player = Rc::clone(&player);
+
+        play_button.connect_clicked(move |_| {
+            player.play();
+        });
+    }
+
+    {
+        let player = Rc::clone(&player);
+
+        stop_button.connect_clicked(move |_| {
+            player.stop();
+        });
+    }
+
+    {
+        let app = app.clone();
+
+        quit_button.connect_clicked(move |_| {
+            app.quit();
+        });
+    }
+
+    controls.append(&play_button);
+    controls.append(&stop_button);
+    controls.append(&quit_button);
+
+    root.append(&picture);
+    root.append(&controls);
+
+    window.set_child(Some(&root));
+
+    {
+        let app = app.clone();
+
+        window.connect_close_request(move |_| {
+            app.quit();
+            glib::Propagation::Proceed
+        });
+    }
+
+    window.present();
+
+    // gtk4paintablesink exposes its paintable after the first video frame.
+    let picture = picture.clone();
+    let player_for_timer = Rc::clone(&player);
+
+    glib::timeout_add_local(Duration::from_millis(250), move || {
+        let Some(paintable) = player_for_timer.paintable() else {
+            return glib::ControlFlow::Continue;
+        };
+
+        if paintable.intrinsic_width() > 0
+            && paintable.intrinsic_height() > 0
+        {
+            picture.set_paintable(Some(&paintable));
+
+            println!(
+                "Video paintable ready: {}x{}",
+                paintable.intrinsic_width(),
+                paintable.intrinsic_height()
+            );
+
+            glib::ControlFlow::Break
+        } else {
+            glib::ControlFlow::Continue
+        }
+    });
+}
 
 fn main() {
-    ffmpeg::init().unwrap();
+    if let Err(error) = gst::init() {
+        eprintln!("Could not initialize GStreamer: {error}");
+        process::exit(1);
+    }
 
-    let app = Application::builder()
-        .application_id("com.example.ffmpeg-gtk-cairo")
+    let app = gtk::Application::builder()
+        .application_id("com.example.moq-gstreamer-player")
         .build();
 
     app.connect_activate(|app| {
-        let window = ApplicationWindow::builder()
-            .application(app)
-            .default_width(1000)
-            .default_height(720)
-            .title("FFmpeg + GTK4 (cairo, no OpenGL)")
-            .build();
+        let player = match Player::new(MOQ_URL, MOQ_BROADCAST) {
+            Ok(player) => Rc::new(player),
 
-        let root = GtkBox::new(Orientation::Horizontal, 12);
-
-        let video_w: i32 = 360;
-        let video_h: i32 = 640;
-
-        let drawing = DrawingArea::new();
-        drawing.set_hexpand(true);
-        drawing.set_vexpand(true);
-        drawing.set_content_width(video_w);
-        drawing.set_content_height(video_h);
-
-        let status = gtk::Label::new(Some("Status: decoding bbb.mp4 ..."));
-        let btn = gtk::Button::with_label("Stop");
-
-        let side = GtkBox::new(Orientation::Vertical, 10);
-        side.set_size_request(300, -1);
-        side.append(&status);
-        side.append(&btn);
-
-        root.append(&drawing);
-        root.append(&side);
-
-        window.set_child(Some(&root));
-        window.show();
-
-        let latest: Arc<Mutex<Option<(Vec<u8>, i32, i32)>>> = Arc::new(Mutex::new(None));
-        let latest_dec = latest.clone();
-
-        let running: Arc<Mutex<bool>> = Arc::new(Mutex::new(true));
-        let running_dec = running.clone();
-
-        // Status updates (async)
-        let (status_tx, status_rx): (Sender<String>, Receiver<String>) = bounded(50);
-        let status_label = status.clone();
-        gtk::glib::MainContext::default().spawn_local(async move {
-            while let Ok(msg) = status_rx.recv().await {
-                status_label.set_text(&msg);
+            Err(error) => {
+                eprintln!("Could not create player: {error}");
+                app.quit();
+                return;
             }
-        });
+        };
 
-        // Redraw requests (async)
-        let (redraw_tx, redraw_rx): (Sender<()>, Receiver<()>) = bounded(100);
-        let drawing_for_redraw = drawing.clone();
-        gtk::glib::MainContext::default().spawn_local(async move {
-            while let Ok(_) = redraw_rx.recv().await {
-                drawing_for_redraw.queue_draw();
-            }
-        });
+        player.install_bus_watch(app);
+        build_ui(app, Rc::clone(&player));
 
-        // Draw func
-        let latest_ui = latest.clone();
-        drawing.set_draw_func(move |_area, cr, width, height| {
-            if let Some((rgba, w, h)) = latest_ui.lock().unwrap().as_ref() {
-                draw_rgba_as_argb32_scaled(cr, rgba, *w, *h, width as i32, height as i32);
-            }
-        });
+        let player_for_start = Rc::clone(&player);
 
-        // Decoder thread
-        thread::spawn(move || {
-            if let Err(e) = decode_loop(
-                "bbb.mp4",
-                running_dec,
-                latest_dec,
-                status_tx,
-                redraw_tx,
-            ) {
-                eprintln!("Decoder error: {e}");
-            }
-        });
-
-        // Stop
-        btn.connect_clicked(move |_| {
-            if let Ok(mut v) = running.lock() {
-                *v = false;
-            }
+        glib::idle_add_local_once(move || {
+            player_for_start.play();
         });
     });
 
     app.run();
-}
-
-fn draw_rgba_as_argb32_scaled(
-    cr: &cairo::Context,
-    rgba: &[u8], // [R,G,B,A]
-    src_w: i32,
-    src_h: i32,
-    dst_w: i32,
-    dst_h: i32,
-) {
-    if src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0 {
-        return;
-    }
-
-    let src_w_usize = src_w as usize;
-    let src_h_usize = src_h as usize;
-
-    // Convert RGBA -> BGRA bytes for cairo ARGB32 on little-endian systems.
-    let mut bgra = vec![0u8; src_w_usize * src_h_usize * 4];
-    for y in 0..src_h_usize {
-        for x in 0..src_w_usize {
-            let i = (y * src_w_usize + x) * 4;
-            let r = rgba[i + 0];
-            let g = rgba[i + 1];
-            let b = rgba[i + 2];
-            let a = rgba[i + 3];
-
-            bgra[i + 0] = b; // B
-            bgra[i + 1] = g; // G
-            bgra[i + 2] = r; // R
-            bgra[i + 3] = a; // A
-        }
-    }
-
-    let mut surface =
-        cairo::ImageSurface::create(cairo::Format::ARgb32, src_w, src_h)
-            .expect("create surface");
-    let stride = surface.stride() as usize;
-    let row_bytes = src_w_usize * 4;
-
-    {
-        let mut data = surface.data().expect("surface.data() failed");
-        for y in 0..src_h_usize {
-            let dst_off = y * stride;
-            let src_off = y * row_bytes;
-            data[dst_off..dst_off + row_bytes]
-                .copy_from_slice(&bgra[src_off..src_off + row_bytes]);
-        }
-    }
-
-    let sx = dst_w as f64 / src_w as f64;
-    let sy = dst_h as f64 / src_h as f64;
-
-    cr.save();
-    cr.scale(sx, sy);
-    cr.set_source_surface(&surface, 0.0, 0.0);
-    cr.paint().ok();
-    cr.restore();
-}
-
-fn decode_loop(
-    path: &str,
-    running: Arc<Mutex<bool>>,
-    latest: Arc<Mutex<Option<(Vec<u8>, i32, i32)>>>,
-    status_tx: Sender<String>,
-    redraw_tx: Sender<()>,
-) -> Result<(), ffmpeg::Error> {
-    let mut ictx = input(&path)?;
-
-    let input_stream = ictx
-        .streams()
-        .best(Type::Video)
-        .ok_or(ffmpeg::Error::StreamNotFound)?;
-
-    let stream_index = input_stream.index();
-    let time_base = input_stream.time_base(); // seconds = pts * num / den
-
-    // FPS fallback when timestamps are missing
-    let mut fps_fallback = 0.0;
-    let avg_frame_rate = input_stream.avg_frame_rate();
-    if avg_frame_rate.1 != 0 {
-        fps_fallback = avg_frame_rate.0 as f64 / avg_frame_rate.1 as f64;
-    }
-    if fps_fallback <= 0.0 {
-        fps_fallback = 30.0;
-    }
-    let frame_duration = 1.0 / fps_fallback;
-
-    let codec_params = input_stream.parameters();
-    let codec_id = codec_params.id();
-    if codec_id == ffmpeg::codec::Id::None {
-        return Err(ffmpeg::Error::DecoderNotFound);
-    }
-
-    let decoder_codec = ffmpeg::codec::decoder::find(codec_id)
-        .ok_or(ffmpeg::Error::DecoderNotFound)?;
-
-    let mut context = ffmpeg::codec::Context::new();
-    context.set_parameters(codec_params)?;
-    let mut decoder = context.decoder().open_as(decoder_codec)?;
-
-    let mut scaler: Option<ScalingContext> = None;
-    let mut out_rgba: Video = Video::empty();
-
-    // Pacing state
-    let mut started = false;
-    let mut start_instant = std::time::Instant::now();
-    let mut start_pts: i64 = 0;
-
-    // If timestamps are absent, pace by frame index
-    let mut frame_index: i64 = 0;
-
-    for (stream, packet) in ictx.packets() {
-        if !*running.lock().unwrap() {
-            break;
-        }
-        if stream.index() != stream_index {
-            continue;
-        }
-
-        decoder.send_packet(&packet)?;
-
-        let mut decoded = Video::empty();
-        while decoder.receive_frame(&mut decoded).is_ok() {
-            if !*running.lock().unwrap() {
-                break;
-            }
-
-            if !started {
-                started = true;
-                start_instant = std::time::Instant::now();
-                start_pts = decoded.timestamp().unwrap_or(0);
-                let _ = status_tx.try_send("Status: playing (timed) ...".to_string());
-            }
-
-            // --- Real-time pacing ---
-            if let Some(pts) = decoded.timestamp() {
-                let elapsed_pts = pts - start_pts;
-                let elapsed_secs =
-                    (elapsed_pts as f64) * (time_base.0 as f64) / (time_base.1 as f64);
-
-                let target = start_instant + std::time::Duration::from_secs_f64(elapsed_secs.max(0.0));
-                let now = std::time::Instant::now();
-                if target > now {
-                    std::thread::sleep(target - now);
-                }
-            } else {
-                // No timestamp: fallback pacing
-                let target_elapsed = (frame_index as f64) * frame_duration;
-                let target = start_instant + std::time::Duration::from_secs_f64(target_elapsed.max(0.0));
-                let now = std::time::Instant::now();
-                if target > now {
-                    std::thread::sleep(target - now);
-                }
-                frame_index += 1;
-            }
-
-            // --- Decode -> scale -> copy RGBA ---
-            let src_w = decoded.width();
-            let src_h = decoded.height();
-
-            if scaler.is_none() {
-                let src_format = decoded.format();
-                let dst_format = ffmpeg::format::Pixel::RGBA;
-
-                let ctx = ScalingContext::get(
-                    src_format,
-                    src_w,
-                    src_h,
-                    dst_format,
-                    src_w,
-                    src_h,
-                    Flags::BILINEAR,
-                )?;
-
-                scaler = Some(ctx);
-                out_rgba = Video::empty();
-
-                let _ = status_tx.try_send(format!(
-                    "Status: playing ({}x{}) ...",
-                    src_w, src_h
-                ));
-            }
-
-            let ctx = scaler.as_mut().unwrap();
-            ctx.run(&decoded, &mut out_rgba)?;
-
-            let width_u32 = out_rgba.width();
-            let height_u32 = out_rgba.height();
-
-            let width: i32 = width_u32.try_into().unwrap_or(0);
-            let height: i32 = height_u32.try_into().unwrap_or(0);
-
-            let plane0 = out_rgba.data(0);
-            let stride_src = out_rgba.stride(0) as usize;
-            let row_bytes_dst = (width as usize) * 4;
-            let height_usize = height as usize;
-
-            let src_ptr = plane0.as_ptr();
-            let src_len = stride_src * height_usize;
-            let src_slice = unsafe { std::slice::from_raw_parts(src_ptr, src_len) };
-
-            // Copy into tightly packed RGBA (width*4 bytes per row)
-            let mut rgba_bytes = vec![0u8; row_bytes_dst * height_usize];
-            for y in 0..height_usize {
-                let src_off = y * stride_src;
-                let dst_off = y * row_bytes_dst;
-                rgba_bytes[dst_off..dst_off + row_bytes_dst]
-                    .copy_from_slice(&src_slice[src_off..src_off + row_bytes_dst]);
-            }
-
-            if let Ok(mut g) = latest.lock() {
-                *g = Some((rgba_bytes, width, height));
-            }
-
-            let _ = redraw_tx.try_send(());
-        }
-    }
-
-    Ok(())
 }
