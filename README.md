@@ -45,7 +45,7 @@ cd target/debug
 ```
 In a second terminal, paste the displayed command to run the binary in subscriber mode and receive sent messages.
 
-Run with `-h` or `--help` flag to list available arga.
+Run binary with `-h` or `--help` flag to list available args.
 
 ## Wire format details
 
