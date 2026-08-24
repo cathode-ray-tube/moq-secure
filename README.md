@@ -16,6 +16,18 @@ MOQ-Secure is designed to provide:
 - **Authenticity** - so frames can be verified as coming from a broadcaster
 - **Flexibility** - balancing security and performance
 
+## Quick Start (Try linux-native-video)
+
+From main repo root:
+```bash
+cargo build -p linux-native-video
+```
+When built:
+```bash
+cd target/debug
+./linux-native-video
+```
+
 ## Frame overview
 
 Each frame contains an unencrypted header followed by a payload area and an optional signature trailer.
