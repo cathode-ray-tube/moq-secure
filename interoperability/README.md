@@ -340,7 +340,9 @@ Target `tsconfig`:
 
 ### 19. Randomness  
 
-Nonce is deterministic (`keyId` + `ctr`).  Counter uniqueness is **critical** – never reuse the same `(keyId, ctr)` pair with ChaCha20‑Poly1305.  
+Nonce is deterministic (`keyId` + `ctr`).  Counter uniqueness is **critical** – never reuse the same `(keyId, ctr)` pair with ChaCha20‑Poly1305.
+
+Care should be taken during any key-generation additions to the code, ensuring randomness.
 
 ---  
 
