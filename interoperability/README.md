@@ -1,6 +1,6 @@
 ## Interoperability
 
-The rust and typescript/javascript implementations are intended to be entirely compatible. Same for browser and Node JS builds.
+The rust and typescript/javascript implementations are intended to be compatible. Same for browser and Node JS builds.
 
 Below are some considerations of the differences, which came to light during development, and will be of use for anyone making changes to the core library or implementing in a different programming language. 
 
