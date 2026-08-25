@@ -1,10 +1,8 @@
 ![moq-secure frame layout](https://github.com/cathode-ray-tube/moq-secure/blob/main/assets/moq-secure-frame-layout.jpeg)
 
-# MOQ-Secure Encrypted Media Frame Format
-
 ### ChaCha20-Poly1305 + Optional Ed25519 Signing
 
-This document defines a **wire format** for encrypted media frames via Media Over QUIC (MOQ).
+This document defines a **wire format** for encrypted media payloads via Media Over QUIC (MOQ).
 
 ## Goals
 
