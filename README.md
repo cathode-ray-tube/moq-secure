@@ -68,13 +68,15 @@ Run binary with `-h` or `--help` flag to list available args and usage:
 ```
 ## Wire format details
 
-The complete on-the-wire field layout, byte concatenation rules, nonce/AAD/digest definitions, and receiver processing order live deeper in the repo for those who want the full technical [specification](https://github.com/cathode-ray-tube/moq-secure/blob/main/spec/README.md)
+The complete on-the-wire field layout, byte concatenation rules, nonce/AAD/digest definitions, and receiver processing order live deeper in the repo for those who want the full technical [specification](https://github.com/cathode-ray-tube/moq-secure/blob/main/specification/README.md)
 
-## Interop
+## Interoperability
 
 Only encrypts the payload so it should work with any MOQ implementation (moq-lite, IETF implementations, etc.).
 
 While aimed at MOQ, with some additional wiring it could encrypt any data sent via other transports (such as WebSockets).
+
+This repo contains implementations in rust and javascript. Compatability between the two can be found in [interoperability]{https://github.com/cathode-ray-tube/moq-secure/blob/main/interoperability/README.md}
 
 ## License
 
