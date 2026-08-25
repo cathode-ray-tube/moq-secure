@@ -38,7 +38,7 @@ wget https://raw.githubusercontent.com/moq-dev/moq/refs/heads/main/demo/relay/lo
 moq-relay localhost.toml
 ```
 
-In a separate terminal, clone this repo:
+In a **separate terminal**, clone this repo:
 
 ```bash
 git clone https://github.com/cathode-ray-tube/moq-secure.git
