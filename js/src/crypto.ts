@@ -1,4 +1,3 @@
-// src/crypto.ts
 import { chacha20poly1305 } from "@noble/ciphers/chacha";
 import { sha256 } from "@noble/hashes/sha256";
 
@@ -6,35 +5,6 @@ import { deriveNonce12 } from "./nonce.js";
 import { MoqSecureError } from "./errors.js";
 
 export const AEAD_TAG_LEN = 16;
-
-function splitCiphertextAndTag(
-  combined: Uint8Array,
-): { ciphertext: Uint8Array; tag: Uint8Array } {
-  if (combined.length < AEAD_TAG_LEN) {
-    throw new MoqSecureError("ciphertext too short for AEAD tag");
-  }
-
-  const split = combined.length - AEAD_TAG_LEN;
-
-  return {
-    ciphertext: combined.slice(0, split),
-    tag: combined.slice(split),
-  };
-}
-
-function combineCiphertextAndTag(
-  ciphertext: Uint8Array,
-  tag: Uint8Array,
-): Uint8Array {
-  if (tag.length !== AEAD_TAG_LEN) {
-    throw new MoqSecureError("ciphertext too short for AEAD tag");
-  }
-
-  const combined = new Uint8Array(ciphertext.length + tag.length);
-  combined.set(ciphertext, 0);
-  combined.set(tag, ciphertext.length);
-  return combined;
-}
 
 export function sha256Digest(data: Uint8Array): Uint8Array {
   return sha256(data);
@@ -48,14 +18,16 @@ export function aeadEncrypt(
   plaintext: Uint8Array,
 ): { ciphertext: Uint8Array; tag: Uint8Array } {
   if (key.length !== 32) {
-    throw new RangeError("AEAD keys must be exactly 32 bytes");
+    throw new RangeError("AEAD key must be 32 bytes");
   }
 
   const nonce = deriveNonce12(keyId, ctr);
-  const cipher = chacha20poly1305(key, nonce, aad);
-  const combined = cipher.encrypt(plaintext);
+  const combined = chacha20poly1305(key, nonce, aad).encrypt(plaintext);
 
-  return splitCiphertextAndTag(combined);
+  return {
+    ciphertext: combined.slice(0, combined.length - AEAD_TAG_LEN),
+    tag: combined.slice(combined.length - AEAD_TAG_LEN),
+  };
 }
 
 export function aeadDecrypt(
@@ -66,17 +38,21 @@ export function aeadDecrypt(
   ciphertext: Uint8Array,
   tag: Uint8Array,
 ): Uint8Array {
-  if (key.length !== 32) {
-    throw new RangeError("AEAD keys must be exactly 32 bytes");
+  if (key.length !== 32 || tag.length !== AEAD_TAG_LEN) {
+    throw MoqSecureError.authFailed();
   }
 
-  const nonce = deriveNonce12(keyId, ctr);
-  const combined = combineCiphertextAndTag(ciphertext, tag);
+  const combined = new Uint8Array(ciphertext.length + tag.length);
+  combined.set(ciphertext);
+  combined.set(tag, ciphertext.length);
 
   try {
-    const cipher = chacha20poly1305(key, nonce, aad);
-    return cipher.decrypt(combined);
+    return chacha20poly1305(
+      key,
+      deriveNonce12(keyId, ctr),
+      aad,
+    ).decrypt(combined);
   } catch {
-    throw new MoqSecureError("AEAD authentication failed");
+    throw MoqSecureError.authFailed();
   }
 }
