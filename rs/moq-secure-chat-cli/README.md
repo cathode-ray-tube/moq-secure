@@ -41,4 +41,10 @@ cd target/debug
 ```
 In a **3rd terminal**, paste the displayed command to run the binary in subscriber mode and receive sent messages.
 
-Run binary with `-h` or `--help` flag to list available args.
+### Troubleshooting
+
+Run binary with `-h` or `--help` flag to list available args and usage:
+
+```bash
+./moq-secure-chat-cli --help
+```
