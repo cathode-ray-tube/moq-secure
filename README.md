@@ -72,7 +72,7 @@ The complete on-the-wire field layout, byte concatenation rules, nonce/AAD/diges
 
 ## Interop
 
-Only encrypts the payload so it should work with any MOQ implementation (e.g., moq-lite, IETF implementations, etc.).
+Only encrypts the payload so it should work with any MOQ implementation (moq-lite, IETF implementations, etc.).
 
 While aimed at MOQ, with some additional wiring it could encrypt any data sent via other transports (such as WebSockets).
 
