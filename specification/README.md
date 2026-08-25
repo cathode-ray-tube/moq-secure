@@ -7,6 +7,7 @@ This document defines a **wire format** for encrypted media payloads via Media O
 ## Goals
 
 - Encrypt **only the media payload** (transport treats bytes as opaque).
+- Entire MOQ-Secure frame is nested within the MOQ frame payload.
 - Use **ChaCha20-Poly1305** for confidentiality + AEAD integrity.
 - Optionally provide authenticity via **Ed25519 signatures** on **some frames** using the broadcaster's prior published key.
 - Keep a **standard frame layout**:
