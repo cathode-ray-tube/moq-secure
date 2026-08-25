@@ -27,7 +27,7 @@ Rust installed:
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
-Install moq-relay from the moq repo, full instructions [here](https://github.com/moq-dev/moq/tree/main/rs/moq-relay).
+Install **moq-relay** (the server) from the moq repo, full instructions [here](https://github.com/moq-dev/moq/tree/main/rs/moq-relay).
 
 ### Run
 
@@ -38,7 +38,7 @@ wget https://raw.githubusercontent.com/moq-dev/moq/refs/heads/main/demo/relay/lo
 moq-relay localhost.toml
 ```
 
-In a **separate terminal**, clone this repo:
+In a **2nd terminal**, clone this repo:
 
 ```bash
 git clone https://github.com/cathode-ray-tube/moq-secure.git
@@ -57,10 +57,15 @@ Run:
 cd target/debug
 ./moq-secure-chat-cli --relay https://localhost:4443/chat --broadcast chat --tls-disable-verify publish
 ```
-In a second terminal, paste the displayed command to run the binary in subscriber mode and receive sent messages.
+In a **3rd terminal**, paste the displayed command to run the binary in subscriber mode and receive sent messages.
 
-Run binary with `-h` or `--help` flag to list available args.
+### Troubleshooting
 
+Run binary with `-h` or `--help` flag to list available args and usage:
+
+```bash
+./moq-secure-chat-cli --help
+```
 ## Wire format details
 
 The complete on-the-wire field layout, byte concatenation rules, nonce/AAD/digest definitions, and receiver processing order live deeper in the repo for those who want the full technical [specification](https://github.com/cathode-ray-tube/moq-secure/blob/main/spec/README.md)
