@@ -66,9 +66,9 @@ Run binary with `-h` or `--help` flag to list available args and usage:
 ```bash
 ./moq-secure-chat-cli --help
 ```
-## Wire format details
+## Specification
 
-The complete on-the-wire field layout, byte concatenation rules, nonce/AAD/digest definitions, and receiver processing order live deeper in the repo for those who want the full technical [specification](https://github.com/cathode-ray-tube/moq-secure/blob/main/specification/README.md)
+The complete on-the-wire field layout, byte concatenation rules, nonce/AAD/digest definitions, and receiver processing order are in [specification](https://github.com/cathode-ray-tube/moq-secure/blob/main/specification/README.md)
 
 ## Interoperability
 
