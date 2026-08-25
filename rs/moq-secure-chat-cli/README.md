@@ -9,7 +9,7 @@ Rust installed:
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
-Install moq-relay from the moq repo, full instructions [here](https://github.com/moq-dev/moq/tree/main/rs/moq-relay).
+Install **moq-relay** (the server) from the moq repo, full instructions [here](https://github.com/moq-dev/moq/tree/main/rs/moq-relay).
 
 ### Run
 
