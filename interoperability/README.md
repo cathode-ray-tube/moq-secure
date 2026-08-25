@@ -344,7 +344,7 @@ Nonce is deterministic (`keyId` + `ctr`).  Counter uniqueness is **critical*
 
 ---  
 
-### 20. Compatibility testing  
+### 20. Compatibility testing - Still to do (priority)  
 
 Key cross‑language test matrix:  
 
