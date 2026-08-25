@@ -1,6 +1,6 @@
 ## Interoperability
 
-The rust and javascript implementations are intended to be entirely compatible. Below are some considerations, which came to light during development, will be of use for anyone making changes to the core library or implementing in a different programming language. It is long-winded, but may save a few headaches down the line.
+The rust and javascript implementations are intended to be entirely compatible. Below are some considerations, which came to light during development, and will be of use for anyone making changes to the core library or implementing in a different programming language. It is long-winded, but may save a few headaches down the line.
 
 ### 1. Async cryptographic APIs  
 
