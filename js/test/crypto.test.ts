@@ -59,26 +59,28 @@ describe("crypto", () => {
       result.tag,
     )).toEqual(plaintext);
   });
-
+  
   it("rejects keys of the wrong length", () => {
-    expect(() => aeadEncrypt(
-      new Uint8Array(31),
-      0,
-      0n,
-      new Uint8Array(),
-      new Uint8Array(),
-    )).toThrow("AEAD key must be 32 bytes");
+  expect(() => aeadEncrypt(
+    new Uint8Array(31),
+    0,
+    0n,
+    new Uint8Array(),
+    new Uint8Array(),
+  )).toThrow("AEAD key must be 32 bytes");
 
-    expect(() => aeadDecrypt(
-  new Uint8Array(31),
-  0,
-  0n,
-  new Uint8Array(),
-  new Uint8Array(),
-  new Uint8Array(16),
-)).toThrowError(expect.objectContaining({
-  code: "AeadAuthFailed",
-}));
+  expect(() => aeadDecrypt(
+    new Uint8Array(31),
+    0,
+    0n,
+    new Uint8Array(),
+    new Uint8Array(),
+    new Uint8Array(16),
+  )).toThrowError(expect.objectContaining({
+    code: "AeadAuthFailed",
+  }));
+});
+
 
   it("rejects an invalid authentication tag", () => {
     const result = aeadEncrypt(
