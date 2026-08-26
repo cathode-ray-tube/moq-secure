@@ -11,7 +11,8 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "vectors:generate": "tsx ../test-vectors/generate-js-vectors.ts"
   },
   "dependencies": {
     "@noble/ciphers": "^1.3.0",
