@@ -31,7 +31,7 @@ Install **moq-relay** (the server) from the moq repo, full instructions [here](h
 
 ### Run
 
-Run moq-relay with this config file, [localhost.toml](https://github.com/moq-dev/moq/blob/main/demo/relay/localhost.toml):
+Run **moq-relay** with this config file, [localhost.toml](https://github.com/moq-dev/moq/blob/main/demo/relay/localhost.toml):
 
 ```bash
 wget https://raw.githubusercontent.com/moq-dev/moq/refs/heads/main/demo/relay/localhost.toml
