@@ -8,9 +8,13 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "vectors:generate": "tsx ../test-vectors/generate-js-vectors.ts"
   },
@@ -21,6 +25,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "typescript": "^5.0.0"
+    "tsx": "^4.23.12",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.11"
   }
 }
