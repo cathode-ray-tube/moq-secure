@@ -78,6 +78,28 @@ While aimed at MOQ, with some additional wiring it could encrypt and sign data s
 
 This repo contains implementations in rust and javascript. Compatability considerations between the two are in [interoperability](https://github.com/cathode-ray-tube/moq-secure/blob/main/interoperability/README.md)
 
+## Tests 
+
+**Test vectors** can be generated, from `/js` root:
+
+```bash
+npm run vectors:generate
+```
+
+This will populate the `frames.json` file in the `test-vectors` directory.
+
+Run **rust** tests, from repo root:
+
+```bash
+cargo test
+```
+
+Run **javascript** tests, from `/js` root:
+
+```bash
+npm test
+```
+
 ## License
 
 This project is dual-licensed: MIT OR Apache-2.0, choose either. See LICENSE-MIT and LICENSE-APACHE-2.0 in the repository root.
