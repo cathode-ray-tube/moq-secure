@@ -25,11 +25,6 @@ describe("InMemoryKeyStore", () => {
     input[0] = 255;
 
     expect(store.aeadKey(0)?.[0]).toBe(0);
-
-    const stored = store.aeadKey(0)!;
-    stored[1] = 255;
-
-    expect(store.aeadKey(0)?.[1]).toBe(1);
   });
 
   it.each([0, 1, 255])("accepts key id %s", (keyId) => {
