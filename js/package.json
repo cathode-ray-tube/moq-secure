@@ -13,7 +13,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "build:browser": "tsup src/index.ts --format iife --global-name MoqSecure --platform browser --out-dir dist/browser"
+    "build:browser": "tsup src/index.ts --format iife --global-name MoqSecure --platform browser --out-dir dist/browser",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
