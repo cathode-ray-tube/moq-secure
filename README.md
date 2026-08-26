@@ -68,7 +68,7 @@ Run binary with `-h` or `--help` flag to list available args and usage:
 ```
 ## Specification
 
-The complete on-the-wire field layout, byte concatenation rules, nonce/AAD/digest definitions, and receiver processing order are in [specification](https://github.com/cathode-ray-tube/moq-secure/blob/main/specification/README.md)
+The complete field layout, byte concatenation rules, nonce/AAD/digest definitions, and receiver processing order are in [specification](https://github.com/cathode-ray-tube/moq-secure/blob/main/specification/README.md)
 
 ## Interoperability
 
