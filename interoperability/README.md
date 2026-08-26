@@ -4,8 +4,6 @@ The Rust and TypeScript/JavaScript versions are meant to be fully compatible, as
 
 The following points highlight subtle differences uncovered during development. They serve as a quick reference for anyone modifying the core library or porting it to another language, helping avoid common pitfalls.
 
-**TODO - write and run the tests**
-
 ### 1. Async cryptographic APIs  
 
 **Rust (synchronous)**  
