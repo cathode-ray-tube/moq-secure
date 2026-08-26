@@ -60,8 +60,9 @@ export class InMemoryKeyStore implements KeyStore {
   private readonly keys = new Array<Uint8Array | undefined>(256);
 
   aeadKey(keyId: number): Uint8Array | undefined {
-    return this.keys[keyId];
-  }
+  return this.keys[keyId]?.slice();
+}
+
 
   setKey(keyId: number, key: Uint8Array): void {
     if (!isKeyId(keyId)) {
