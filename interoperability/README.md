@@ -342,7 +342,7 @@ Care should be taken during any key-generation additions to the code, ensuring r
 
 ---  
 
-### 20. Testing 
+### 20. Tests
 
 **Test vectors** can be generated, from `/js` root:
 
