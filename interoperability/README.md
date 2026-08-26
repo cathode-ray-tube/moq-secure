@@ -350,7 +350,7 @@ Care should be taken during any key-generation additions to the code, ensuring r
 npm run vectors:generate
 ```
 
-This will populate the `frames.json` file in `test-vectors` directory.
+This will populate the `frames.json` file in the `test-vectors` directory.
 
 Run **rust** tests, from repo root:
 
