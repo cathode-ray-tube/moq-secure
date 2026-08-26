@@ -278,16 +278,6 @@ export async function encryptFrame(
       `encrypted flag must be 0 or 1, got ${encrypted}`,
     );
   }
-
-  const key = keyStore.aeadKey(keyId);
-  if (!key) {
-    throw new MoqSecureError(
-      "InvalidKeyId",
-      `unknown or not-loaded key_id: ${keyId}`,
-      keyId,
-    );
-  }
-
   const sigFlag = nSigned === 0 ? 0 : maybeSign ? 1 : 0;
 
   const header = new WireHeader(
@@ -308,6 +298,14 @@ export async function encryptFrame(
   let tag = new Uint8Array(AEAD_TAG_LEN);
 
   if (encrypted === 1) {
+    const key = keyStore.aeadKey(keyId);
+    if (!key) {
+    throw new MoqSecureError(
+      "InvalidKeyId",
+      `unknown or not-loaded key_id: ${keyId}`,
+      keyId,
+    );
+  }
     const result = aeadEncrypt(
       key,
       keyId,
