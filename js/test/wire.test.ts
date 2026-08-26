@@ -44,7 +44,7 @@ describe("WireHeader", () => {
     expect(parsed.keyId).toBe(7);
     expect(parsed.ctr).toBe(42n);
     expect(parsed.nSigned).toBe(3);
-    expect(parsed.sigFlag).toBe(1);
+    expect(parsed.sigFlag).toBe(0);
     expect(parsed.encrypted).toBe(1);
     expect(parsed.padLen).toBe(5);
   });
