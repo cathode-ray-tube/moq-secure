@@ -70,14 +70,15 @@ describe("crypto", () => {
     )).toThrow("AEAD key must be 32 bytes");
 
     expect(() => aeadDecrypt(
-      new Uint8Array(31),
-      0,
-      0n,
-      new Uint8Array(),
-      new Uint8Array(),
-      new Uint8Array(16),
-    )).toThrowErrorMatchingObject({ code: "AeadAuthFailed" });
-  });
+  new Uint8Array(31),
+  0,
+  0n,
+  new Uint8Array(),
+  new Uint8Array(),
+  new Uint8Array(16),
+)).toThrowError(expect.objectContaining({
+  code: "AeadAuthFailed",
+}));
 
   it("rejects an invalid authentication tag", () => {
     const result = aeadEncrypt(
@@ -91,14 +92,15 @@ describe("crypto", () => {
     result.tag[0] ^= 1;
 
     expect(() => aeadDecrypt(
-      key,
-      1,
-      2n,
-      new Uint8Array([9]),
-      result.ciphertext,
-      result.tag,
-    )).toThrowErrorMatchingObject({ code: "AeadAuthFailed" });
-  });
+  key,
+  1,
+  2n,
+  new Uint8Array([9]),
+  result.ciphertext,
+  result.tag,
+)).toThrowError(expect.objectContaining({
+  code: "AeadAuthFailed",
+}));
 
   it("derives the same nonce used by encryption", () => {
     expect(deriveNonce12(7, 42n)).toEqual(
