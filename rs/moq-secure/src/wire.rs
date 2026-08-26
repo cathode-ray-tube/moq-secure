@@ -319,7 +319,7 @@ impl Frame {
 }
 
 pub fn encrypt_frame(
-    keys: &[[u8; 32]; 256],
+    key_store: &dyn KeyStore,
     broadcaster_private_key: &ed25519_dalek::SigningKey,
     key_id: u8,
     ctr: u64,
@@ -418,7 +418,7 @@ pub fn encrypt_frame(
 }
 
 pub fn decrypt_frame(
-    keys: &[[u8; 32]; 256],
+    key_store: &dyn KeyStore,
     broadcaster_public_key: &ed25519_dalek::VerifyingKey,
     lease_remaining: &mut u8,
     frame_bytes: &[u8],
