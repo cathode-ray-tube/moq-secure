@@ -74,7 +74,7 @@ The complete field layout, byte concatenation rules, nonce/AAD/digest definition
 
 Only encrypts the payload so it should work with any MOQ implementation (moq-lite, IETF implementations, etc.).
 
-While aimed at MOQ, with some additional wiring it could encrypt any data sent via other transports (such as WebSockets).
+While aimed at MOQ, with some additional wiring it could encrypt and sign data sent via other transports (such as WebSockets).
 
 This repo contains implementations in rust and javascript. Compatability considerations between the two are in [interoperability](https://github.com/cathode-ray-tube/moq-secure/blob/main/interoperability/README.md)
 
