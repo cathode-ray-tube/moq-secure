@@ -25,15 +25,15 @@ const signingSeed = hex(
 describe("WireHeader", () => {
   it("encodes and parses a header", () => {
     const header = new WireHeader(
-      MAGIC,
-      VERSION,
-      7,
-      42n,
-      3,
-      1,
-      1,
-      5,
-    );
+  MAGIC,
+  VERSION,
+  7,
+  42n,
+  3,
+  0, // sigFlag
+  1,
+  5,
+);
 
     const parsed = Frame.parse(
       new Uint8Array([...header.encode(), ...new Uint8Array(16)]),
