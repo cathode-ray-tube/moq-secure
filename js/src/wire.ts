@@ -298,7 +298,8 @@ export async function encryptFrame(
   let tag = new Uint8Array(AEAD_TAG_LEN);
 
   if (encrypted === 1) {
-    const key = keyStore.aeadKey(keyId);
+    let key: Uint8Array | undefined;
+    key = keyStore.aeadKey(keyId);
     if (!key) {
     throw new MoqSecureError(
       "InvalidKeyId",
