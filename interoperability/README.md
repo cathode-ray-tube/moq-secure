@@ -344,27 +344,26 @@ Care should be taken during any key-generation additions to the code, ensuring r
 
 ---  
 
-### 20. Compatibility testing - Still to do (priority)  
+### 20. Testing 
 
-Key cross‑language test matrix:  
+**Test vectors** can be generated, from `/js` root:
 
-| Test | Expected result |
-|------|-----------------|
-| Rust encrypt → TypeScript decrypt | ✅ |
-| TypeScript encrypt → Rust decrypt | ✅ |
-| Rust nonce → TypeScript nonce | ✅ |
-| Rust header → TypeScript header | ✅ |
-| Rust digest → TypeScript digest | ✅ |
-| Signed & unsigned lease sequences | ✅ |
-| Encrypted & unencrypted frames | ✅ |
-| `padLen = 0` | ✅ |
-| Non‑zero padding | ✅ |
-| Empty plaintext | ✅ |
-| Empty ciphertext with valid AEAD tag | ✅ |
-| Truncated frames | ❌ (error) |
-| Invalid flags | ❌ (error) |
-| Invalid signatures | ❌ (error) |
-| Missing keys | ❌ (error) |
-| Counters > `Number.MAX_SAFE_INTEGER` | ✅ (use `bigint`) |
+```bash
+npm run vectors:generate
+```
+
+This will populate the `frames.json` file in `test-vectors` directory.
+
+Run **rust** tests, from repo root:
+
+```bash
+cargo test
+```
+
+Run **javascript** tests, from `/js` root:
+
+```bash
+npm test
+```
 
 *Wire format and cryptographic bytes are the compatibility boundaries; internal class names, module layout, or async vs sync APIs may differ.* 
