@@ -1,5 +1,5 @@
 // src/nonce.ts
-import { sha256 } from "@noble/hashes/sha256";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 export const NONCE_PREFIX_5 = new TextEncoder().encode("nonce");
 

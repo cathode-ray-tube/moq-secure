@@ -2,6 +2,78 @@
   "version": 1,
   "aeadKey": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
   "ed25519Seed": "1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100",
-  "nonceVectors": [],
-  "frames": []
+  "nonceVectors": [
+    {
+      "keyId": 0,
+      "ctr": "0",
+      "nonce": "4acdd781747a1bfd5ab885de"
+    },
+    {
+      "keyId": 1,
+      "ctr": "1",
+      "nonce": "86bec94cc51a1ebd3957ba90"
+    },
+    {
+      "keyId": 7,
+      "ctr": "42",
+      "nonce": "3ea7d92eeec70d0a61fd1423"
+    },
+    {
+      "keyId": 255,
+      "ctr": "18446744073709551615",
+      "nonce": "65fc39c521df1cc71b603a93"
+    }
+  ],
+  "frames": [
+    {
+      "name": "encrypted_unsigned_empty",
+      "plaintext": "",
+      "frame": "4d4f5153010700000000000000000000010000000000000000000000f29b1e0902a13f3d1ac744797f117606",
+      "header": "4d4f5153010700000000000000000000010000000000000000000000",
+      "payload": "",
+      "tag": "f29b1e0902a13f3d1ac744797f117606",
+      "signature": null,
+      "lease": 0
+    },
+    {
+      "name": "encrypted_unsigned_binary",
+      "plaintext": "0001027f80feff",
+      "frame": "4d4f5153010700000000000000010000010000000300000000000000099b963e0eca5000143d5b3a9345ee4904ab9be266a8604681f7",
+      "header": "4d4f5153010700000000000000010000010000000300000000000000",
+      "payload": "099b963e0eca5000143d",
+      "tag": "5b3a9345ee4904ab9be266a8604681f7",
+      "signature": null,
+      "lease": 0
+    },
+    {
+      "name": "encrypted_signed",
+      "plaintext": "7369676e656420656e63727970746564206d65646961",
+      "frame": "4d4f51530107000000000000000203010100000005000000000000008e5f051a99cb9aad598791fa3389f150e7e1b69bed29989f79df56ece39b4c616f8e9ba0b8a8e2de5a1b6fcd152f8c308f35e43231d273adb6c6d254d9f2620d1a1b9167579501391cd24af442ba4e0bad6fc7f976c00a3bbb15e9141af06f05136548e4521959a078e20e",
+      "header": "4d4f5153010700000000000000020301010000000500000000000000",
+      "payload": "8e5f051a99cb9aad598791fa3389f150e7e1b69bed29989f79df56",
+      "tag": "ece39b4c616f8e9ba0b8a8e2de5a1b6f",
+      "signature": "cd152f8c308f35e43231d273adb6c6d254d9f2620d1a1b9167579501391cd24af442ba4e0bad6fc7f976c00a3bbb15e9141af06f05136548e4521959a078e20e",
+      "lease": 3
+    },
+    {
+      "name": "cleartext_unsigned",
+      "plaintext": "636c65617274657874",
+      "frame": "4d4f51530107000000000000000300000000000002000000000000000000636c65617274657874",
+      "header": "4d4f5153010700000000000000030000000000000200000000000000",
+      "payload": "0000636c65617274657874",
+      "tag": "00000000000000000000000000000000",
+      "signature": null,
+      "lease": 0
+    },
+    {
+      "name": "cleartext_signed",
+      "plaintext": "deadbeef",
+      "frame": "4d4f515301070000000000000004020100000000010000000000000000deadbeefb3bd4e48b90fbfe705ba98f375c31346c50a7ed0a957661ba8088d8dcb06db44656662b60917534564e6af7f53253416779ccd0811bc2b8ef32491e3adece80c",
+      "header": "4d4f5153010700000000000000040201000000000100000000000000",
+      "payload": "00deadbeef",
+      "tag": "00000000000000000000000000000000",
+      "signature": "b3bd4e48b90fbfe705ba98f375c31346c50a7ed0a957661ba8088d8dcb06db44656662b60917534564e6af7f53253416779ccd0811bc2b8ef32491e3adece80c",
+      "lease": 2
+    }
+  ]
 }

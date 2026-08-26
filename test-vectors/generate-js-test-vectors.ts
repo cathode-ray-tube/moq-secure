@@ -1,14 +1,27 @@
+import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { privateKeyFromSeed } from "@noble/ed25519";
+
+import * as ed25519 from "@noble/ed25519";
 
 import {
   InMemoryKeyStore,
   deriveNonce12,
   encryptFrame,
   type Frame,
-} from "../src/index.js";
+} from "../js/src/index.js";
+
+// Configure SHA-512 for @noble/ed25519 using Node.js built-in crypto.
+ed25519.hashes.sha512 = (...messages: Uint8Array[]) => {
+  const hash = createHash("sha512");
+
+  for (const message of messages) {
+    hash.update(message);
+  }
+
+  return new Uint8Array(hash.digest());
+};
 
 function hex(bytes: Uint8Array): string {
   return Array.from(bytes)
@@ -24,7 +37,11 @@ function utf8(value: string): Uint8Array {
   return new TextEncoder().encode(value);
 }
 
-function frameRecord(name: string, frame: Frame, plaintext: Uint8Array) {
+function frameRecord(
+  name: string,
+  frame: Frame,
+  plaintext: Uint8Array,
+) {
   return {
     name,
     plaintext: hex(plaintext),
@@ -45,7 +62,7 @@ const ed25519Seed = Uint8Array.from(
   Array.from({ length: 32 }, (_, i) => 31 - i),
 );
 
-const privateKey = await privateKeyFromSeed(ed25519Seed);
+const privateKey = ed25519Seed;
 
 const keyStore = new InMemoryKeyStore();
 keyStore.setKey(7, aeadKey);
@@ -125,7 +142,7 @@ const cases: Array<{
   },
 ];
 
-const frames = [];
+const frames: ReturnType<typeof frameRecord>[] = [];
 
 for (const testCase of cases) {
   const frame = await encryptFrame(
@@ -140,7 +157,9 @@ for (const testCase of cases) {
     testCase.plaintext,
   );
 
-  frames.push(frameRecord(testCase.name, frame, testCase.plaintext));
+  frames.push(
+    frameRecord(testCase.name, frame, testCase.plaintext),
+  );
 }
 
 const output = {
@@ -156,5 +175,9 @@ const outputPath = join(
   "frames.json",
 );
 
-await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);
+await writeFile(
+  outputPath,
+  `${JSON.stringify(output, null, 2)}\n`,
+);
+
 console.log(`wrote ${outputPath}`);

@@ -1,5 +1,5 @@
-import { chacha20poly1305 } from "@noble/ciphers/chacha";
-import { sha256 } from "@noble/hashes/sha256";
+import { chacha20poly1305 } from "@noble/ciphers/chacha.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 import { deriveNonce12 } from "./nonce.js";
 import { MoqSecureError } from "./errors.js";
