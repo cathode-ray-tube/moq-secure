@@ -30,7 +30,8 @@ The tests cover:
 
 ## Running the tests
 
-Run the complete test suite from the package root:
+Run the complete test suite from the package root `/js`:
 
 ```bash
 npm test
+```
