@@ -1,6 +1,6 @@
 ![moq-secure logo](./assets/moq-secure-logo-256.png)
 
-[![Tests](https://github.com/OWNER/REPOSITORY/actions/workflows/test.yml/badge.svg)](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/test.yml)
+[![Tests](https://github.com/alice/moq-secure/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/test.yml)
 
 # MOQ-Secure Encryption & Signing
 
