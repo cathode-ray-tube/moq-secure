@@ -80,9 +80,10 @@ This repo contains implementations in rust and javascript. Compatability conside
 
 ## Tests 
 
-**Test vectors** can be generated, from `/js` root:
+**Test vectors** can be generated, from repo root:
 
 ```bash
+npm install
 npm run vectors:generate
 ```
 
@@ -94,7 +95,7 @@ Run **rust** tests, from repo root:
 cargo test
 ```
 
-Run **javascript** tests, from `/js` root:
+Run **javascript** tests, from repo root:
 
 ```bash
 npm test
