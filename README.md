@@ -82,7 +82,7 @@ This repo contains implementations in rust and javascript. Compatability conside
 
 ## Tests 
 
-**Test vectors** can be generated, from repo root:
+**Test vectors** can be generated, from monorepo root:
 
 ```bash
 npm install
@@ -91,13 +91,13 @@ npm run vectors:generate
 
 This will populate the `frames.json` file in the `test-vectors` directory.
 
-Run **rust** tests, from repo root:
+Run **rust** tests, from monorepo root:
 
 ```bash
 cargo test
 ```
 
-Run **javascript** tests, from repo root:
+Run **javascript** tests, from monorepo root:
 
 ```bash
 npm test
