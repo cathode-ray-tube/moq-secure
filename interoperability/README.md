@@ -344,9 +344,13 @@ Care should be taken during any key-generation additions to the code, ensuring r
 
 ### 20. Tests
 
-**Test vectors** can be generated, from `/js` root:
+**Test vectors** can be generated, from repo root:
 
 ```bash
+**Test vectors** can be generated, from repo root:
+
+```bash
+npm install
 npm run vectors:generate
 ```
 
@@ -358,7 +362,7 @@ Run **rust** tests, from repo root:
 cargo test
 ```
 
-Run **javascript** tests, from `/js` root:
+Run **javascript** tests, from repo root:
 
 ```bash
 npm test
