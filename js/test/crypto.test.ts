@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+
+import vectors from "../../test-vectors/frames.json";
+
 import {
   aeadDecrypt,
   aeadEncrypt,
@@ -6,14 +9,51 @@ import {
 } from "../src/crypto.js";
 import { deriveNonce12 } from "../src/nonce.js";
 
+type FrameVector = {
+  name: string;
+  plaintext: string;
+  padLen: number;
+  frame: string;
+  header: string;
+  payload: string;
+  tag: string;
+  signature: string | null;
+  lease: number;
+};
+
+type TestVectors = {
+  aeadKey: string;
+  frames: FrameVector[];
+};
+
+const testVectors = vectors as TestVectors;
+
 const hex = (value: string): Uint8Array =>
   Uint8Array.from(
-    value.match(/../g)!.map((part) => parseInt(part, 16)),
+    value.match(/../g)?.map((part) => parseInt(part, 16)) ?? [],
   );
 
-const key = hex(
-  "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
-);
+function readU64BE(bytes: Uint8Array, offset: number): bigint {
+  let value = 0n;
+
+  for (let index = 0; index < 8; index++) {
+    value = (value << 8n) | BigInt(bytes[offset + index]);
+  }
+
+  return value;
+}
+
+function frameVector(name: string): FrameVector {
+  const result = testVectors.frames.find((frame) => frame.name === name);
+
+  if (!result) {
+    throw new Error(`Missing frame vector: ${name}`);
+  }
+
+  return result;
+}
+
+const key = hex(testVectors.aeadKey);
 
 describe("crypto", () => {
   it("computes SHA-256 digests", () => {
@@ -24,38 +64,83 @@ describe("crypto", () => {
     );
   });
 
-  it("encrypts and decrypts an empty plaintext", () => {
-    const aad = hex(
-      "4d4f5153010700000000000000000000010000000000000000000000",
-    );
+  it("matches the generated encrypted empty-frame vector", () => {
+    const expected = frameVector("encrypted_unsigned_empty");
+    const header = hex(expected.header);
+    const payload = hex(expected.payload);
+
+    const keyId = header[5];
+    const ctr = readU64BE(header, 6);
 
     const result = aeadEncrypt(
       key,
-      7,
-      0n,
-      aad,
+      keyId,
+      ctr,
+      header,
+      payload,
+    );
+
+    expect(result.ciphertext).toEqual(
       new Uint8Array(),
     );
 
-    expect(result.ciphertext).toEqual(new Uint8Array());
-    expect(Buffer.from(result.tag).toString("hex")).toBe(
-      "f29b1e0902a13f3d1ac744797f117606",
-    );
+    expect(result.tag).toEqual(hex(expected.tag));
 
     expect(
       aeadDecrypt(
         key,
-        7,
-        0n,
-        aad,
+        keyId,
+        ctr,
+        header,
         result.ciphertext,
         result.tag,
       ),
-    ).toEqual(new Uint8Array());
+    ).toEqual(payload);
+  });
+
+  it("matches the generated encrypted binary-frame vector", () => {
+    const expected = frameVector("encrypted_unsigned_binary");
+    const header = hex(expected.header);
+    const payload = hex(expected.payload);
+    const serialized = hex(expected.frame);
+
+    const keyId = header[5];
+    const ctr = readU64BE(header, 6);
+
+    const result = aeadEncrypt(
+      key,
+      keyId,
+      ctr,
+      header,
+      payload,
+    );
+
+    expect(result.ciphertext).toEqual(
+      serialized.slice(
+        header.length,
+        serialized.length - 16,
+      ),
+    );
+
+    expect(result.tag).toEqual(hex(expected.tag));
+
+    expect(
+      aeadDecrypt(
+        key,
+        keyId,
+        ctr,
+        header,
+        result.ciphertext,
+        result.tag,
+      ),
+    ).toEqual(payload);
   });
 
   it("round-trips binary plaintext", () => {
-    const aad = new Uint8Array([1, 2, 3]);
+    const aad = hex(
+      "4d4f515301070000000000000000000000000001",
+    );
+
     const plaintext = hex("0001027f80feff");
 
     const result = aeadEncrypt(
