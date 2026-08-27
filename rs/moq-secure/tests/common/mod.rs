@@ -38,8 +38,10 @@ pub struct FrameVector {
 
 
 pub fn read_vectors() -> VectorFile {
-    serde_json::from_str(include_str!("../test-vectors/frames.json"))
-        .expect("valid frames.json")
+   serde_json::from_str(include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../test-vectors/frames.json"
+)))
 }
 
 pub fn hex_decode(value: &str) -> Vec<u8> {
