@@ -11,8 +11,8 @@ export type MoqSecureErrorCode =
   | "MissingSigSlot"
   | "SignatureNotAllowedByNSigned"
   | "DecryptFailed"
-  | "InvalidKeyId";
-  | "InvalidPadLength"
+  | "InvalidKeyId"
+  | "InvalidPadLength";
 
 export class MoqSecureError extends Error {
   readonly code: MoqSecureErrorCode;
