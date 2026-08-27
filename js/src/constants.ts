@@ -3,4 +3,6 @@ export const VERSION = 1;
 
 export const SIG_SLOT_LEN = 64;
 export const AEAD_TAG_LEN = 16;
-export const FIXED_HEADER_LEN = 28;
+export const PAD_LEN_FIELD_LEN = 4;
+export const FIXED_HEADER_LEN = 17;
+
