@@ -14,6 +14,9 @@ pub enum MoqSecureError {
     #[error("ciphertext too short for AEAD tag")]
     CiphertextTooShort,
 
+    #[error("invalid padding length")]
+    InvalidPadLength,
+
     #[error("encrypted flag must be 0 or 1, got {0}")]
     InvalidEncryptedFlag(u8),
 
@@ -26,10 +29,14 @@ pub enum MoqSecureError {
     #[error("signature invalid or signature verification failed")]
     InvalidSignature,
 
-    #[error("signing is disabled but sigFlag indicates signature or sigSlot non-zero")]
+    #[error(
+        "signing is disabled but sigFlag indicates signature or sigSlot is non-zero"
+    )]
     SigningMismatch,
 
-    #[error("signing enabled but sigFlag indicates signature while sigSlot is missing/zero")]
+    #[error(
+        "signing enabled but sigFlag indicates signature while sigSlot is missing or zero"
+    )]
     MissingSigSlot,
 
     #[error("signature present (sigFlag=1) but nSigned is 0")]
