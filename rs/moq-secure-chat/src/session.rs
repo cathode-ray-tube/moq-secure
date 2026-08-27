@@ -1,6 +1,10 @@
-use moq_secure::wire::{decrypt_frame, encrypt_frame};
-use crate::keys::ChatKeys;
 use anyhow::Context;
+use moq_secure::{
+    wire::{decrypt_frame, encrypt_frame},
+    InMemoryKeyStore,
+};
+
+use crate::keys::ChatKeys;
 
 pub struct ChatSession {
     pub keys: ChatKeys,
@@ -10,36 +14,47 @@ pub struct ChatSession {
 
 impl ChatSession {
     pub fn new(keys: ChatKeys, broadcast: String, track: String) -> Self {
-        Self { keys, broadcast, track }
+        Self {
+            keys,
+            broadcast,
+            track,
+        }
     }
 
-    fn keystore_array(&self) -> [[u8; 32]; 256] {
-        let mut ks = [[0u8; 32]; 256];
-        ks[self.keys.key_id as usize] = self.keys.aead_key;
-        ks
+    fn keystore(&self) -> InMemoryKeyStore {
+        let mut keystore = InMemoryKeyStore::empty();
+        keystore.set_key(self.keys.key_id, self.keys.aead_key);
+        keystore
     }
 }
 
 /// Publisher publishes each chat message as one MoQ group containing one frame.
-/// “easy mapping”: 1 chat msg == 1 group with one object.
+///
+/// One chat message equals one group containing one object.
 pub struct ChatPublisher {
     pub keys: ChatKeys,
     pub track: moq_net::track::Producer,
-    pub n_signed: u8, // 0 disables signing; CLI will use 1
+    pub n_signed: u8,
     pub crypto_ctr: u64,
     pub group_ctr: u64,
 }
 
 impl ChatPublisher {
     pub fn new(track: moq_net::track::Producer, keys: ChatKeys) -> Self {
-        // CLI requirement: every message encrypted + signed => sig enabled for all messages.
         Self {
             keys,
             track,
+            // Every message is encrypted and signed.
             n_signed: 1,
             crypto_ctr: 0,
             group_ctr: 0,
         }
+    }
+
+    fn keystore(&self) -> InMemoryKeyStore {
+        let mut keystore = InMemoryKeyStore::empty();
+        keystore.set_key(self.keys.key_id, self.keys.aead_key);
+        keystore
     }
 
     pub async fn send_message(&mut self, plaintext: &[u8]) -> anyhow::Result<()> {
@@ -49,13 +64,14 @@ impl ChatPublisher {
         let group_id = self.group_ctr;
         self.group_ctr = self.group_ctr.wrapping_add(1);
 
-        // pad_len=0 for simplicity; you can add options later.
+        // No padding for now.
         let pad_len = 0u32;
 
-        // encrypted=1 (your cli requirement implies every message encrypted)
-        // maybe_sign=true (sig_flag=1 when n_signed>0)
+        // Build the keystore expected by moq-secure.
+        let keystore = self.keystore();
+
         let frame = encrypt_frame(
-            &self.keystore_array(),
+            &keystore,
             &self.keys.signing_private,
             self.keys.key_id,
             crypto_ctr,
@@ -69,42 +85,41 @@ impl ChatPublisher {
 
         let frame_bytes = frame.serialize();
 
-        // IMPORTANT: group_id must be unique per group across sends.
+        // group_id must be unique across sends.
         let mut group = self
             .track
             .create_group(group_id.into())
             .context("create_group")?;
 
-        // One object per group.
-        group.write_frame(moq_native::moq_net::Timestamp::now(), frame_bytes)?;
+        group.write_frame(
+            moq_native::moq_net::Timestamp::now(),
+            frame_bytes,
+        )?;
 
         group.finish()?;
 
         Ok(())
     }
 
-    fn keystore_array(&self) -> [[u8; 32]; 256] {
-        let mut ks = [[0u8; 32]; 256];
-        ks[self.keys.key_id as usize] = self.keys.aead_key;
-        ks
-    }
-
     pub fn finish(self) {
-        // Dropping producer usually closes; caller may also close broadcast externally.
+        // Dropping the producer normally closes it.
         drop(self.track);
     }
 }
 
-/// Subscriber receives chat frames, verifies signature + decrypts.
+/// Subscriber receives chat frames, verifies their signatures, and decrypts them.
 pub struct ChatSubscriber {
     pub verify_key: ed25519_dalek::VerifyingKey,
-    pub keys: ChatKeys, // holds aead key too
+    pub keys: ChatKeys,
     pub track: moq_net::track::Subscriber,
     pub lease_remaining: u8,
 }
 
 impl ChatSubscriber {
-    pub fn new(track: moq_net::track::Subscriber, keys: ChatKeys) -> Self {
+    pub fn new(
+        track: moq_net::track::Subscriber,
+        keys: ChatKeys,
+    ) -> Self {
         Self {
             verify_key: keys.signing_verify,
             keys,
@@ -113,31 +128,32 @@ impl ChatSubscriber {
         }
     }
 
+    fn keystore(&self) -> InMemoryKeyStore {
+        let mut keystore = InMemoryKeyStore::empty();
+        keystore.set_key(self.keys.key_id, self.keys.aead_key);
+        keystore
+    }
+
     pub async fn run(
         mut self,
         mut on_message: impl FnMut(Vec<u8>) + Send,
     ) -> anyhow::Result<()> {
+        let keystore = self.keystore();
+
         while let Some(mut group) = self.track.recv_group().await? {
             while let Some(object) = group.read_frame().await? {
-                let frame_bytes = &object.payload;
-
                 let plaintext = decrypt_frame(
-                    &self.keystore_array(),
+                    &keystore,
                     &self.verify_key,
                     &mut self.lease_remaining,
-                    frame_bytes,
+                    &object.payload,
                 )
                 .context("decrypt_frame failed")?;
 
                 on_message(plaintext);
             }
         }
-        Ok(())
-    }
 
-    fn keystore_array(&self) -> [[u8; 32]; 256] {
-        let mut ks = [[0u8; 32]; 256];
-        ks[self.keys.key_id as usize] = self.keys.aead_key;
-        ks
+        Ok(())
     }
 }
