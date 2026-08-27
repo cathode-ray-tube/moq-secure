@@ -1,4 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import {
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+
 import {
   asyncIterableToReadableStream,
   collect,
@@ -6,34 +12,57 @@ import {
   transformStream,
 } from "../src/streams.js";
 
-const bytes = (...values: number[]) => new Uint8Array(values);
+const bytes = (...values: number[]) =>
+  new Uint8Array(values);
 
-async function* source(...chunks: Uint8Array[]) {
-  for (const chunk of chunks) yield chunk;
+async function* source(
+  ...chunks: Uint8Array[]
+) {
+  for (const chunk of chunks) {
+    yield chunk;
+  }
 }
 
 describe("streams", () => {
   it("collects chunks", async () => {
-    expect(await collect(source(bytes(1, 2), bytes(), bytes(3, 4))))
-      .toEqual(bytes(1, 2, 3, 4));
+    expect(
+      await collect(
+        source(
+          bytes(1, 2),
+          bytes(),
+          bytes(3, 4),
+        ),
+      ),
+    ).toEqual(bytes(1, 2, 3, 4));
   });
 
   it("transforms every chunk", async () => {
-    const result = await collect(transformStream(
-      source(bytes(1, 2), bytes(3)),
-      (chunk) => chunk.map((x) => x * 2),
-    ));
+    const result = await collect(
+      transformStream(
+        source(
+          bytes(1, 2),
+          bytes(3),
+        ),
+        (chunk) => chunk.map((value) => value * 2),
+      ),
+    );
 
     expect(result).toEqual(bytes(2, 4, 6));
   });
 
   it("converts an async iterable to a readable stream", async () => {
     const stream = asyncIterableToReadableStream(
-      source(bytes(1), bytes(2, 3)),
+      source(
+        bytes(1),
+        bytes(2, 3),
+      ),
     );
 
-    expect(await collect(readableStreamToAsyncIterable(stream)))
-      .toEqual(bytes(1, 2, 3));
+    expect(
+      await collect(
+        readableStreamToAsyncIterable(stream),
+      ),
+    ).toEqual(bytes(1, 2, 3));
   });
 
   it("propagates source errors", async () => {
@@ -42,19 +71,29 @@ describe("streams", () => {
       throw new Error("boom");
     }
 
-    await expect(collect(
-      readableStreamToAsyncIterable(
-        asyncIterableToReadableStream(failing()),
+    await expect(
+      collect(
+        readableStreamToAsyncIterable(
+          asyncIterableToReadableStream(failing()),
+        ),
       ),
-    )).rejects.toThrow("boom");
+    ).rejects.toThrow("boom");
   });
 
   it("calls iterator.return when the stream is cancelled", async () => {
-    const returnFn = vi.fn(async () => ({ done: true, value: undefined }));
+    const returnFn = vi.fn(async () => ({
+      done: true,
+      value: undefined,
+    }));
 
     const iterator = {
-      next: vi.fn(async () => ({ done: false, value: bytes(1) })),
+      next: vi.fn(async () => ({
+        done: false,
+        value: bytes(1),
+      })),
+
       return: returnFn,
+
       [Symbol.asyncIterator]() {
         return this;
       },
@@ -65,6 +104,9 @@ describe("streams", () => {
     );
 
     await stream.cancel("test reason");
-    expect(returnFn).toHaveBeenCalledWith("test reason");
+
+    expect(returnFn).toHaveBeenCalledWith(
+      "test reason",
+    );
   });
 });
