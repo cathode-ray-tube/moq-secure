@@ -1,4 +1,4 @@
-![moq-secure frame layout](https://github.com/cathode-ray-tube/moq-secure/blob/main/assets/moq-secure-frame-layout.jpeg)
+![moq-secure frame layout](https://github.com/cathode-ray-tube/moq-secure/blob/main/assets/moq-secure-frame-layout-new.jpeg)
 
 # ChaCha20-Poly1305 + Optional Ed25519 Signing
 
