@@ -25,7 +25,7 @@ ed25519.hashes.sha512 = (...messages: Uint8Array[]) => {
 
 function hex(bytes: Uint8Array): string {
   return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
 }
 
@@ -41,25 +41,33 @@ function frameRecord(
   name: string,
   frame: Frame,
   plaintext: Uint8Array,
+  padLen: number,
 ) {
   return {
     name,
+
+    // Test metadata. These fields are not necessarily present on the wire.
     plaintext: hex(plaintext),
+    padLen,
+
+    // Serialized wire components.
     frame: hex(frame.serialize()),
     header: hex(frame.header.encode()),
     payload: hex(frame.payload),
     tag: hex(frame.tag),
     signature: frame.signature ? hex(frame.signature) : null,
+
+    // Initial lease value expected for this frame.
     lease: frame.header.nSigned,
   };
 }
 
 const aeadKey = Uint8Array.from(
-  Array.from({ length: 32 }, (_, i) => i),
+  Array.from({ length: 32 }, (_, index) => index),
 );
 
 const ed25519Seed = Uint8Array.from(
-  Array.from({ length: 32 }, (_, i) => 31 - i),
+  Array.from({ length: 32 }, (_, index) => 31 - index),
 );
 
 const privateKey = ed25519Seed;
@@ -158,7 +166,12 @@ for (const testCase of cases) {
   );
 
   frames.push(
-    frameRecord(testCase.name, frame, testCase.plaintext),
+    frameRecord(
+      testCase.name,
+      frame,
+      testCase.plaintext,
+      testCase.padLen,
+    ),
   );
 }
 
