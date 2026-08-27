@@ -11,7 +11,10 @@ import {
 import { aeadDecrypt, aeadEncrypt, sha256Digest } from "./crypto.js";
 import { MoqSecureError } from "./errors.js";
 import type { KeyStore } from "./keys.js";
-import { addPadding, removePadding } from "./padding.js";
+import {
+  prependZeroPadding,
+  removePadding,
+} from "./padding.js";
 
 ed25519.hashes.sha512 = (...messages: Uint8Array[]) => {
   const hash = createHash("sha512");
@@ -24,7 +27,8 @@ ed25519.hashes.sha512 = (...messages: Uint8Array[]) => {
 };
 
 function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
-  return a.length === b.length && a.every((value, index) => value === b[index]);
+  return a.length === b.length &&
+    a.every((value, index) => value === b[index]);
 }
 
 function concat(...parts: Uint8Array[]): Uint8Array {
@@ -287,6 +291,11 @@ export class Frame {
         );
       }
 
+      // The encrypted plaintext is:
+      //
+      //   uint32be(padLen) || zero padding || plaintext
+      //
+      // Therefore decrypt the complete payload before removing padding.
       paddedPlaintext = aeadDecrypt(
         key,
         this.header.keyId,
@@ -296,6 +305,7 @@ export class Frame {
         this.tag,
       );
     } else {
+      // Cleartext payload has the same layout.
       paddedPlaintext = this.payload;
     }
 
@@ -342,7 +352,12 @@ export async function encryptFrame(
 
   header.validate();
 
-  const paddedPlaintext = addPadding(
+  // Produces:
+  //
+  //   uint32be(padLen) || zero padding || plaintext
+  //
+  // This entire value is encrypted for encrypted frames.
+  const paddedPlaintext = prependZeroPadding(
     plaintext,
     padLen,
   );
@@ -369,9 +384,11 @@ export async function encryptFrame(
       paddedPlaintext,
     );
 
+    // payload is ciphertext only. The 16-byte tag is stored separately.
     payload = encryptedResult.ciphertext;
     tag = encryptedResult.tag;
   } else {
+    // Cleartext payload contains the same pad_len-prefixed layout.
     payload = paddedPlaintext;
   }
 
