@@ -80,9 +80,10 @@ This repo contains implementations in rust and javascript. Compatability conside
 
 ## Tests 
 
-**Test vectors** can be generated, from `/js` root:
+**Test vectors** can be generated, from `/test-vectors` root:
 
 ```bash
+cd test-vectors
 npm run vectors:generate
 ```
 
