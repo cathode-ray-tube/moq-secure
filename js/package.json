@@ -16,7 +16,7 @@
     "build:browser": "tsup src/index.ts --format iife --global-name MoqSecure --platform browser --out-dir dist/browser",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@noble/ciphers": "^2.3.0",
