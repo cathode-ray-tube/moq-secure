@@ -40,17 +40,17 @@ fn rust_consumes_js_frames() {
     let signing_key = SigningKey::from_bytes(&seed);
     let verifying_key = VerifyingKey::from(&signing_key);
 
-    let mut keys = [[0u8; 32]; 256];
-    keys[7] = key;
+    let mut key_store = InMemoryKeyStore::empty();
+    key_store.set_key(7, key);
+
+    let mut lease_remaining = 0u8;
 
     for vector in vectors.frames {
         let frame_bytes = hex_decode(&vector.frame);
         let expected_plaintext = hex_decode(&vector.plaintext);
 
-        let mut lease_remaining = 0u8;
-
         let plaintext = decrypt_frame(
-            &keys,
+            &key_store,
             &verifying_key,
             &mut lease_remaining,
             &frame_bytes,
@@ -80,8 +80,8 @@ fn rust_produces_the_same_frames_as_js() {
 
     let signing_key = SigningKey::from_bytes(&seed);
 
-    let mut keys = [[0u8; 32]; 256];
-    keys[7] = key;
+    let mut key_store = InMemoryKeyStore::empty();
+    key_store.set_key(7, key);
 
     for vector in vectors.frames {
         let frame_bytes = hex_decode(&vector.frame);
@@ -90,14 +90,14 @@ fn rust_produces_the_same_frames_as_js() {
             .expect("JS frame should parse in Rust");
 
         let generated = encrypt_frame(
-            &keys,
+            &key_store,
             &signing_key,
             parsed.header.key_id,
             parsed.header.ctr,
             parsed.header.n_signed,
             parsed.header.sig_flag == 1,
             parsed.header.encrypted,
-            parsed.header.pad_len,
+            vector.pad_len,
             &hex_decode(&vector.plaintext),
         )
         .expect("Rust encryption should succeed");
