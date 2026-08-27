@@ -1,5 +1,7 @@
 ![moq-secure logo](./assets/moq-secure-logo-256.png)
 
+[![Tests](https://github.com/OWNER/REPOSITORY/actions/workflows/test.yml/badge.svg)](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/test.yml)
+
 # MOQ-Secure Encryption & Signing
 
 A fixed format for end-to-end encrypting **media payloads** carried by **Media Over QUIC (MOQ)** using **AEAD encryption (ChaCha20-Poly1305)** with an **optional Ed25519 signature**.
