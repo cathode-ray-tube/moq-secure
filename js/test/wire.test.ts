@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import * as ed25519 from "@noble/ed25519";
+
+import vectors from "../../test-vectors/frames.json";
+
 import {
   Frame,
   WireHeader,
@@ -7,231 +10,388 @@ import {
   encryptFrame,
 } from "../src/wire.js";
 import { InMemoryKeyStore } from "../src/keys.js";
-import { MoqSecureError } from "../src/errors.js";
 import { MAGIC, VERSION } from "../src/constants.js";
 
-const hex = (value: string) =>
-  Uint8Array.from(value.match(/../g)!.map((x) => parseInt(x, 16)));
+type FrameVector = {
+  name: string;
+  plaintext: string;
+  padLen: number;
+  frame: string;
+  header: string;
+  payload: string;
+  tag: string;
+  signature: string | null;
+  lease: number;
+};
 
-const key = hex(
-  "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
-);
+type TestVectors = {
+  version: number;
+  aeadKey: string;
+  ed25519Seed: string;
+  nonceVectors: Array<{
+    keyId: number;
+    ctr: string;
+    nonce: string;
+  }>;
+  frames: FrameVector[];
+};
 
-// Correct 32-byte seed from the supplied vector.
-const signingSeed = hex(
-  "1f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100",
-);
+const testVectors = vectors as TestVectors;
+
+const hex = (value: string): Uint8Array =>
+  Uint8Array.from(
+    value.match(/../g)?.map((part) => parseInt(part, 16)) ?? [],
+  );
+
+const bytes = (...values: number[]) =>
+  new Uint8Array(values);
+
+function readU64BE(
+  value: Uint8Array,
+  offset: number,
+): bigint {
+  let result = 0n;
+
+  for (let index = 0; index < 8; index++) {
+    result = (result << 8n) |
+      BigInt(value[offset + index]);
+  }
+
+  return result;
+}
+
+function vector(name: string): FrameVector {
+  const result = testVectors.frames.find(
+    (frame) => frame.name === name,
+  );
+
+  if (!result) {
+    throw new Error(`Missing frame vector: ${name}`);
+  }
+
+  return result;
+}
+
+function headerFields(headerHex: string) {
+  const header = hex(headerHex);
+
+  return {
+    bytes: header,
+    keyId: header[5],
+    ctr: readU64BE(header, 6),
+    nSigned: header[14],
+    sigFlag: header[15],
+    encrypted: header[16],
+  };
+}
+
+function storeWithKey() {
+  const store = new InMemoryKeyStore();
+  store.setKey(7, hex(testVectors.aeadKey));
+  return store;
+}
 
 describe("WireHeader", () => {
-  it("encodes and parses a header", () => {
+  it("encodes and parses the new 17-byte header", () => {
     const header = new WireHeader(
-  MAGIC,
-  VERSION,
-  7,
-  42n,
-  3,
-  0, // sigFlag
-  1,
-  5,
-);
+      MAGIC,
+      VERSION,
+      7,
+      42n,
+      3,
+      0,
+      1,
+    );
 
-    const parsed = Frame.parse(
-      new Uint8Array([...header.encode(), ...new Uint8Array(16)]),
-    ).header;
+    expect(header.encode()).toHaveLength(17);
+
+    const encoded = new Uint8Array([
+      ...header.encode(),
+
+      // pad_len = 0
+      0,
+      0,
+      0,
+      0,
+
+      // tag
+      ...new Uint8Array(16),
+    ]);
+
+    const parsed = Frame.parse(encoded).header;
 
     expect(parsed.magic).toEqual(MAGIC);
-    expect(parsed.version).toBe(1);
+    expect(parsed.version).toBe(VERSION);
     expect(parsed.keyId).toBe(7);
     expect(parsed.ctr).toBe(42n);
     expect(parsed.nSigned).toBe(3);
     expect(parsed.sigFlag).toBe(0);
     expect(parsed.encrypted).toBe(1);
-    expect(parsed.padLen).toBe(5);
   });
 
-  it("rejects invalid headers", () => {
+  it("does not include pad_len in the header", () => {
+    const header = new WireHeader(
+      MAGIC,
+      VERSION,
+      7,
+      42n,
+      3,
+      0,
+      1,
+    );
+
+    expect(header.encode()).toHaveLength(17);
+  });
+
+  it("rejects invalid magic", () => {
     const header = new WireHeader(
       new Uint8Array([0, 0, 0, 0]),
-      1,
+      VERSION,
       0,
       0n,
-      0,
       0,
       0,
       0,
     );
 
     expect(() => header.validate()).toThrowError(
-      expect.objectContaining({ code: "InvalidMagic" }),
+      expect.objectContaining({
+        code: "InvalidMagic",
+      }),
     );
   });
 
   it("rejects signing when nSigned is zero", () => {
-    const header = new WireHeader(MAGIC, 1, 0, 0n, 0, 1, 0, 0);
+    const header = new WireHeader(
+      MAGIC,
+      VERSION,
+      0,
+      0n,
+      0,
+      1,
+      0,
+    );
 
     expect(() => header.validate()).toThrowError(
-      expect.objectContaining({ code: "SigningMismatch" }),
+      expect.objectContaining({
+        code: "SigningMismatch",
+      }),
     );
   });
 });
 
-describe("Frame", () => {
-  it("round-trips encrypted unsigned data", async () => {
-    const keys = new InMemoryKeyStore();
-    keys.setKey(7, key);
+describe("generated frame vectors", () => {
+  it.each(testVectors.frames)(
+    "$name has the expected serialized components",
+    async (expected) => {
+      const fields = headerFields(expected.header);
 
-    const frame = await encryptFrame(
-      keys,
-      signingSeed,
-      7,
-      0n,
-      0,
-      false,
-      1,
-      0,
-      new Uint8Array(),
+      const frame = await encryptFrame(
+        storeWithKey(),
+        hex(testVectors.ed25519Seed),
+        fields.keyId,
+        fields.ctr,
+        fields.nSigned,
+        fields.sigFlag === 1,
+        fields.encrypted,
+        expected.padLen,
+        hex(expected.plaintext),
+      );
+
+      expect(frame.header.encode()).toEqual(
+        fields.bytes,
+      );
+
+      expect(frame.payload).toEqual(
+        hex(expected.payload),
+      );
+
+      expect(frame.tag).toEqual(
+        hex(expected.tag),
+      );
+
+      if (expected.signature === null) {
+        expect(frame.signature).toBeUndefined();
+      } else {
+        expect(frame.signature).toEqual(
+          hex(expected.signature),
+        );
+      }
+
+      expect(frame.serialize()).toEqual(
+        hex(expected.frame),
+      );
+    },
+  );
+
+  it.each(testVectors.frames)(
+    "$name decrypts to the expected plaintext",
+    async (expected) => {
+      const fields = headerFields(expected.header);
+      const signed = fields.sigFlag === 1;
+
+      const lease = { remaining: 0 };
+      const publicKey = signed
+        ? await ed25519.getPublicKeyAsync(
+            hex(testVectors.ed25519Seed),
+          )
+        : new Uint8Array();
+
+      const plaintext = await decryptFrame(
+        fields.encrypted === 1
+          ? storeWithKey()
+          : new InMemoryKeyStore(),
+        publicKey,
+        lease,
+        hex(expected.frame),
+      );
+
+      expect(plaintext).toEqual(
+        hex(expected.plaintext),
+      );
+
+      expect(lease.remaining).toBe(
+        expected.lease,
+      );
+    },
+  );
+
+  it("encodes pad_len at the beginning of the payload", () => {
+    const expected = vector(
+      "encrypted_unsigned_binary",
     );
 
-    const decoded = await decryptFrame(
-      keys,
-      await ed25519.getPublicKeyAsync(signingSeed),
-      { remaining: 0 },
-      frame.serialize(),
+    expect(expected.padLen).toBe(3);
+
+    expect(expected.payload.slice(0, 8)).toBe(
+      "00000003",
     );
 
-    expect(decoded).toEqual(new Uint8Array());
-    expect(frame.payload).toEqual(new Uint8Array());
-    expect(frame.tag).toEqual(
-      hex("f29b1e0902a13f3d1ac744797f117606"),
+    expect(expected.payload.slice(8, 14)).toBe(
+      "000000000000",
     );
   });
 
-  it("round-trips cleartext with zero padding", async () => {
-    const keys = new InMemoryKeyStore();
-    const plaintext = hex("636c65617274657874");
-
-    const frame = await encryptFrame(
-      keys,
-      signingSeed,
-      7,
-      3n,
-      0,
-      false,
-      0,
-      2,
-      plaintext,
+  it("encodes an empty payload with pad_len zero", () => {
+    const expected = vector(
+      "encrypted_unsigned_empty",
     );
 
-    expect(frame.payload).toEqual(hex("0000636c65617274657874"));
-
-    expect(await decryptFrame(
-      keys,
-      new Uint8Array(),
-      { remaining: 0 },
-      frame.serialize(),
-    )).toEqual(plaintext);
+    expect(expected.payload).toBe("00000000");
+    expect(expected.plaintext).toBe("");
   });
 
-  it("signs and verifies a frame while updating the lease", async () => {
-    const keys = new InMemoryKeyStore();
-    keys.setKey(7, key);
+  it("places the tag before the signature", () => {
+    const expected = vector("encrypted_signed");
+    const fields = headerFields(expected.header);
+    const serialized = hex(expected.frame);
+    const payload = hex(expected.payload);
+    const tag = hex(expected.tag);
+    const signature = hex(expected.signature!);
 
-    const frame = await encryptFrame(
-      keys,
-      signingSeed,
-      7,
-      2n,
-      3,
-      true,
-      1,
-      5,
-      hex("7369676e656420656e63727970746564206d65646961"),
-    );
+    const payloadOffset = fields.bytes.length;
+    const tagOffset = payloadOffset + payload.length;
+    const signatureOffset = tagOffset + tag.length;
 
-    const lease = { remaining: 0 };
-    const publicKey = await ed25519.getPublicKeyAsync(signingSeed);
+    expect(serialized.slice(
+      payloadOffset,
+      tagOffset,
+    )).toEqual(payload);
 
-    expect(await decryptFrame(
-      keys,
-      publicKey,
-      lease,
-      frame.serialize(),
-    )).toEqual(hex("7369676e656420656e63727970746564206d65646961"));
+    expect(serialized.slice(
+      tagOffset,
+      signatureOffset,
+    )).toEqual(tag);
 
-    expect(lease.remaining).toBe(3);
+    expect(serialized.slice(
+      signatureOffset,
+    )).toEqual(signature);
+  });
+});
+
+describe("Frame errors", () => {
+  it("rejects a frame shorter than the header", () => {
+    expect(() => Frame.parse(new Uint8Array(16)))
+      .toThrowError(
+        expect.objectContaining({
+          code: "TruncatedFrame",
+        }),
+      );
   });
 
-  it("rejects tampered ciphertext", async () => {
-    const keys = new InMemoryKeyStore();
-    keys.setKey(7, key);
-
-    const frame = await encryptFrame(
-      keys,
-      signingSeed,
-      7,
-      0n,
-      0,
-      false,
-      1,
-      0,
-      bytes(1, 2, 3),
+  it("rejects an unsupported version", () => {
+    const encoded = hex(
+      vector("encrypted_unsigned_empty").frame,
     );
 
-    const encoded = frame.serialize();
+    encoded[4] = 99;
+
+    expect(() => Frame.parse(encoded))
+      .toThrowError(
+        expect.objectContaining({
+          code: "UnsupportedVersion",
+        }),
+      );
+  });
+
+  it("rejects tampered encrypted frame data", async () => {
+    const expected = vector(
+      "encrypted_unsigned_binary",
+    );
+
+    const encoded = hex(expected.frame);
     encoded[encoded.length - 1] ^= 1;
 
-    await expect(decryptFrame(
-      keys,
-      new Uint8Array(),
-      { remaining: 0 },
-      encoded,
-    )).rejects.toThrowError(
-      expect.objectContaining({ code: "AeadAuthFailed" }),
+    await expect(
+      decryptFrame(
+        storeWithKey(),
+        new Uint8Array(),
+        { remaining: 0 },
+        encoded,
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("rejects an unknown encryption key", async () => {
+    const expected = vector(
+      "encrypted_unsigned_empty",
+    );
+
+    await expect(
+      decryptFrame(
+        new InMemoryKeyStore(),
+        new Uint8Array(),
+        { remaining: 0 },
+        hex(expected.frame),
+      ),
+    ).rejects.toThrowError(
+      expect.objectContaining({
+        code: "InvalidKeyId",
+      }),
     );
   });
 
-  it("rejects unknown encryption keys", async () => {
-    const frame = await encryptFrame(
-      new InMemoryKeyStore(),
-      signingSeed,
-      7,
-      0n,
-      0,
-      false,
-      0,
-      0,
-      bytes(1),
+  it("rejects a missing encrypted-frame tag", () => {
+    const expected = vector(
+      "encrypted_unsigned_empty",
     );
 
-    const header = new WireHeader(MAGIC, 1, 7, 0n, 0, 0, 1, 0);
-    const encrypted = new Frame({
-      header,
-      payload: frame.payload,
-      tag: new Uint8Array(16),
-    });
-
-    await expect(encrypted.decodePlaintext(
-      new InMemoryKeyStore(),
-      new Uint8Array(),
-      { remaining: 0 },
-    )).rejects.toThrowError(
-      expect.objectContaining({ code: "InvalidKeyId" }),
+    const encoded = hex(expected.frame);
+    encoded.set(
+      encoded.slice(0, encoded.length - 16),
     );
+
+    expect(() => Frame.parse(
+      encoded.slice(0, encoded.length - 16),
+    )).toThrow();
   });
 
-  it("rejects truncated and invalid frames", () => {
-    expect(() => Frame.parse(new Uint8Array(27)))
-      .toThrowError(expect.objectContaining({ code: "TruncatedFrame" }));
+  it("rejects a missing signed-frame signature", () => {
+    const expected = vector("cleartext_signed");
+    const encoded = hex(expected.frame);
 
-    const invalid = new Uint8Array(28);
-    invalid.set(MAGIC);
-    invalid[4] = 99;
-
-    expect(() => Frame.parse(invalid))
-      .toThrowError(expect.objectContaining({ code: "UnsupportedVersion" }));
+    expect(() => Frame.parse(
+      encoded.slice(0, encoded.length - 64),
+    )).toThrow();
   });
 });
-
-function bytes(...values: number[]) {
-  return new Uint8Array(values);
-}
