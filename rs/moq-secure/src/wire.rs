@@ -141,7 +141,8 @@ impl Frame {
             (rest0, None)
         } else {
             let split_at = rest0.len() - SIG_SLOT_LEN;
-            rest0.split_at(split_at).into()
+            let (payload, signature) = rest0.split_at(split_at);
+            (payload, Some(signature))
         };
 
         let signature = if let Some(sig_bytes) = signature_bytes {
