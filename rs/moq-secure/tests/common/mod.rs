@@ -24,6 +24,10 @@ pub struct NonceVector {
 pub struct FrameVector {
     pub name: String,
     pub plaintext: String,
+
+    #[serde(rename = "padLen")]
+    pub pad_len: u32,
+
     pub frame: String,
     pub header: String,
     pub payload: String,
@@ -31,6 +35,7 @@ pub struct FrameVector {
     pub signature: Option<String>,
     pub lease: u8,
 }
+
 
 pub fn read_vectors() -> VectorFile {
     serde_json::from_str(include_str!("../test-vectors/frames.json"))
