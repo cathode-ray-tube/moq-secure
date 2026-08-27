@@ -1,11 +1,16 @@
-magic                 4 bytes
-version               1 byte
-key_id                1 byte
-ctr                   8 bytes, big-endian
-n_signed              1 byte
-sig_flag              1 byte
-encrypted             1 byte
-pad_len               4 bytes, big-endian
-payload               variable
-AEAD tag              16 bytes if encrypted == 1
-signature             64 bytes if sig_flag == 1
+magic(4)
+version(1)
+key_id(1)
+ctr(8)
+n_signed(1)
+sig_flag(1)
+encrypted(1)
+payload
+tag(16, encrypted frames only)
+signature(64, signed frames only)
+
+payload:
+
+pad_len(4-byte big-endian)
+zero padding(pad_len)
+plaintext
