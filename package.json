@@ -1,11 +1,16 @@
 {
-  "name": "moq-secure",
+  "name": "moq-secure-monorepo",
   "private": true,
   "workspaces": [
     "js",
     "test-vectors"
   ],
   "scripts": {
-    "vectors:generate": "npm run vectors:generate --workspace js"
+    "build": "npm run build --workspace js",
+    "build:browser": "npm run build:browser --workspace js",
+    "test": "npm test --workspace js",
+    "test:watch": "npm run test:watch --workspace js",
+    "typecheck": "npm run typecheck --workspace js",
+    "vectors:generate": "npm run generate --workspace test-vectors"
   }
 }
