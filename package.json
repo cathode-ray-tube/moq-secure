@@ -1,0 +1,11 @@
+{
+  "name": "moq-secure",
+  "private": true,
+  "workspaces": [
+    "js",
+    "test-vectors"
+  ],
+  "scripts": {
+    "vectors:generate": "npm run vectors:generate --workspace js"
+  }
+}
