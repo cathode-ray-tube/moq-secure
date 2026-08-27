@@ -1,9 +1,6 @@
 import { PAD_LEN_FIELD_LEN } from "./constants.js";
 
-export function addPadding(
-  plaintext: Uint8Array,
-  padLength: number,
-): Uint8Array {
+function validatePadLength(padLength: number): void {
   if (
     !Number.isSafeInteger(padLength) ||
     padLength < 0 ||
@@ -11,6 +8,20 @@ export function addPadding(
   ) {
     throw new RangeError("padLength must be a non-negative u32");
   }
+}
+
+/**
+ * Produces:
+ *
+ *   uint32be(padLength) || zero padding || plaintext
+ *
+ * The returned value is the complete plaintext passed to AEAD.
+ */
+export function prependZeroPadding(
+  plaintext: Uint8Array,
+  padLength: number,
+): Uint8Array {
+  validatePadLength(padLength);
 
   const result = new Uint8Array(
     PAD_LEN_FIELD_LEN + padLength + plaintext.length,
@@ -19,13 +30,40 @@ export function addPadding(
   const view = new DataView(result.buffer);
   view.setUint32(0, padLength, false);
 
-  // The zero-initialized region between the length field and plaintext
-  // is the padding.
-  result.set(plaintext, PAD_LEN_FIELD_LEN + padLength);
+  // The Uint8Array is zero-initialized, so this region is zero padding.
+  result.set(
+    plaintext,
+    PAD_LEN_FIELD_LEN + padLength,
+  );
 
   return result;
 }
 
+/**
+ * Removes:
+ *
+ *   uint32be(padLength) || zero padding
+ *
+ * and returns the original plaintext.
+ */
+export function removeZeroPadding(
+  paddedPlaintext: Uint8Array,
+  padLength: number,
+): Uint8Array {
+  validatePadLength(padLength);
+
+  const contentStart = PAD_LEN_FIELD_LEN + padLength;
+
+  if (contentStart > paddedPlaintext.length) {
+    throw new RangeError("plaintext is shorter than padLength");
+  }
+
+  return paddedPlaintext.slice(contentStart);
+}
+
+/**
+ * Removes padding when the pad length is stored in the first four bytes.
+ */
 export function removePadding(
   paddedPlaintext: Uint8Array,
 ): Uint8Array {
@@ -40,11 +78,11 @@ export function removePadding(
   );
 
   const padLength = view.getUint32(0, false);
-  const contentStart = PAD_LEN_FIELD_LEN + padLength;
 
-  if (contentStart > paddedPlaintext.length) {
-    throw new RangeError("invalid pad length");
-  }
-
-  return paddedPlaintext.slice(contentStart);
+  return removeZeroPadding(paddedPlaintext, padLength);
 }
+
+/**
+ * Backwards-compatible name used by wire.ts.
+ */
+export const addPadding = prependZeroPadding;
