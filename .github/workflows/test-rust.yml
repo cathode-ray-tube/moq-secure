@@ -16,10 +16,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -30,5 +30,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate test vectors and run Rust tests
-        run: npm run test-rust
+      - name: Generate test vectors
+        run: npm run generate-test-vectors --workspace js
+
+      - name: Check generated vectors
+        run: ls -la test-vectors
+
+      - name: Run Rust tests
+        run: cargo test --all-targets --all-features
