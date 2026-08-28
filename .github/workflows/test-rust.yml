@@ -27,18 +27,30 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
       - name: Install system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
             libglib2.0-dev \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libgdk-pixbuf-2.0-dev \
+            libgtk-3-dev \
             pkg-config
 
       - name: Install JavaScript dependencies
-        run: npm ci
+        run: npm ci --prefer-offline
 
       - name: Generate test vectors
         run: npm run generate-test-vectors --workspace js
+
+      - name: Verify generated test vectors
+        run: |
+          test -s test-vectors/frames.json
+          ls -lh test-vectors/frames.json
 
       - name: Run Rust tests
         run: cargo test --all-targets --all-features -- --nocapture
