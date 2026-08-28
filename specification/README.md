@@ -1,4 +1,6 @@
 ![moq-secure frame layout](https://github.com/cathode-ray-tube/moq-secure/blob/main/assets/moq-secure-frame-layout-new.jpeg)
+### The above diagram shows the frame layout, which is nested entirely within the payload of a MOQ frame.
+
 
 # ChaCha20-Poly1305 + Optional Ed25519 Signing
 
