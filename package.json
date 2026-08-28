@@ -8,12 +8,9 @@
   "scripts": {
     "build": "npm run build --workspace js",
     "build:browser": "npm run build:browser --workspace js",
-    "generate-test-vectors": "npm run generate --workspace test-vectors",
-    "pretest": "npm run generate-test-vectors",
     "test": "npm test --workspace js",
     "test:watch": "npm run test:watch --workspace js",
-    "test-rust": "npm run generate-test-vectors && cargo test",
-    "typecheck": "npm run typecheck --workspace js",
-    "vectors:generate": "npm run generate --workspace test-vectors"
+    "test-rust": "npm run generate-test-vectors --workspace js && cargo test",
+    "typecheck": "npm run typecheck --workspace js"
   }
 }
