@@ -27,14 +27,20 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install dependencies
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libglib2.0-dev \
+            pkg-config
+
+      - name: Install JavaScript dependencies
         run: npm ci
 
       - name: Generate test vectors
         run: npm run generate-test-vectors --workspace js
 
-      - name: Check generated vectors
-        run: ls -la test-vectors
-
       - name: Run Rust tests
-        run: cargo test --all-targets --all-features
+        run: cargo test --all-targets --all-features -- --nocapture
+        env:
+          RUST_BACKTRACE: "1"
