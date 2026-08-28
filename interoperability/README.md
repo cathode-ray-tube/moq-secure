@@ -363,6 +363,7 @@ cargo test
 Run **javascript** tests, from monorepo root (command automatically generates test vectors first):
 
 ```bash
-npm 
+npm test 
+```
 
 *Wire format and cryptographic bytes are the compatibility boundaries; internal class names, module layout, or async vs sync APIs may differ.* 
