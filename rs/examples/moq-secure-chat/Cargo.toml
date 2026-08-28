@@ -16,6 +16,6 @@ ed25519-dalek = { version = "2", features = ["rand_core"] }
 moq-net = "0.2.6"
 moq-native = { version = "0.19.5" }
 
-moq-secure = { path = "../moq-secure" }
+moq-secure = { path = "../../moq-secure" }
 thiserror = "1"
 url = "2"

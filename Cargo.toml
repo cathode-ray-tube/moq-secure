@@ -1,3 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["rs/moq-secure", "rs/moq-secure-chat", "rs/moq-secure-chat-cli", "rs/linux-native-video"]
+
+members = [
+    "rs/moq-secure",
+    "rs/examples/moq-secure-chat",
+    "rs/examples/moq-secure-chat-cli",
+    "rs/examples/linux-native-video",
+]

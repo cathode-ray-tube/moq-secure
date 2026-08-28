@@ -3,6 +3,7 @@
   "private": true,
   "workspaces": [
     "js",
+    "js/examples/*",
     "test-vectors"
   ],
   "scripts": {
