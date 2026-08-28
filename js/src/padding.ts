@@ -13,9 +13,9 @@ function validatePadLength(padLength: number): void {
 /**
  * Produces:
  *
- *   uint32be(padLength) || zero padding || plaintext
+ *   zero padding || plaintext
  *
- * The returned value is the complete plaintext passed to AEAD.
+ * The pad length field is added separately by the wire layer.
  */
 export function prependZeroPadding(
   plaintext: Uint8Array,
@@ -24,17 +24,11 @@ export function prependZeroPadding(
   validatePadLength(padLength);
 
   const result = new Uint8Array(
-    PAD_LEN_FIELD_LEN + padLength + plaintext.length,
+    padLength + plaintext.length,
   );
 
-  const view = new DataView(result.buffer);
-  view.setUint32(0, padLength, false);
-
-  // The Uint8Array is zero-initialized, so this region is zero padding.
-  result.set(
-    plaintext,
-    PAD_LEN_FIELD_LEN + padLength,
-  );
+  // Uint8Array is zero-initialized.
+  result.set(plaintext, padLength);
 
   return result;
 }
@@ -42,7 +36,7 @@ export function prependZeroPadding(
 /**
  * Removes:
  *
- *   uint32be(padLength) || zero padding
+ *   zero padding
  *
  * and returns the original plaintext.
  */
@@ -52,17 +46,19 @@ export function removeZeroPadding(
 ): Uint8Array {
   validatePadLength(padLength);
 
-  const contentStart = PAD_LEN_FIELD_LEN + padLength;
-
-  if (contentStart > paddedPlaintext.length) {
+  if (padLength > paddedPlaintext.length) {
     throw new RangeError("plaintext is shorter than padLength");
   }
 
-  return paddedPlaintext.slice(contentStart);
+  return paddedPlaintext.slice(padLength);
 }
 
 /**
- * Removes padding when the pad length is stored in the first four bytes.
+ * Removes:
+ *
+ *   uint32be(padLength) || zero padding
+ *
+ * and returns the original plaintext.
  */
 export function removePadding(
   paddedPlaintext: Uint8Array,
@@ -79,10 +75,13 @@ export function removePadding(
 
   const padLength = view.getUint32(0, false);
 
-  return removeZeroPadding(paddedPlaintext, padLength);
+  return removeZeroPadding(
+    paddedPlaintext.subarray(PAD_LEN_FIELD_LEN),
+    padLength,
+  );
 }
 
 /**
- * Backwards-compatible name used by wire.ts.
+ * Backwards-compatible name used by existing callers.
  */
 export const addPadding = prependZeroPadding;
