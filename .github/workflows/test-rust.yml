@@ -34,12 +34,13 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
+            pkg-config \
             libglib2.0-dev \
             libcairo2-dev \
             libpango1.0-dev \
             libgdk-pixbuf-2.0-dev \
             libgtk-3-dev \
-            pkg-config
+            libgtk-4-dev
 
       - name: Install JavaScript dependencies
         run: npm ci --prefer-offline
