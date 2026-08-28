@@ -354,16 +354,15 @@ npm run vectors:generate
 
 This will populate the `frames.json` file in the `test-vectors` directory.
 
-Run **rust** tests, from monorepo root:
+Run **rust** tests, from monorepo root, after first running the above commands to generate the test vectors:
 
 ```bash
 cargo test
 ```
 
-Run **javascript** tests, from monorepo root:
+Run **javascript** tests, from monorepo root (command automatically generates test vectors first):
 
 ```bash
-npm test
-```
+npm 
 
 *Wire format and cryptographic bytes are the compatibility boundaries; internal class names, module layout, or async vs sync APIs may differ.* 
