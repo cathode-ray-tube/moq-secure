@@ -23,3 +23,9 @@ Expected output:
 ```text
 hello from moq-secure
 ```
+
+## Source
+
+The example implementation is in `src/index.ts`
+
+The example uses encryption without signatures. The nSigned value is 0, so the placeholder signing keys are not used.
