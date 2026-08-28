@@ -43,7 +43,7 @@ const hex = (value: string): Uint8Array =>
     value.match(/../g)?.map((part) => parseInt(part, 16)) ?? [],
   );
 
-const bytes = (...values: number[]) =>
+const bytes = (...values: number[]): Uint8Array =>
   new Uint8Array(values);
 
 function readU64BE(
@@ -256,29 +256,46 @@ describe("generated frame vectors", () => {
     },
   );
 
-  it("encodes pad_len at the beginning of the payload", () => {
+  it("decrypts the encrypted binary payload to the expected plaintext", async () => {
     const expected = vector(
       "encrypted_unsigned_binary",
     );
 
-    expect(expected.padLen).toBe(3);
+    const fields = headerFields(expected.header);
 
-    expect(expected.payload.slice(0, 8)).toBe(
-      "00000003",
+    const decrypted = await decryptFrame(
+      storeWithKey(),
+      new Uint8Array(),
+      { remaining: 0 },
+      hex(expected.frame),
     );
 
-    expect(expected.payload.slice(8, 14)).toBe(
-      "000000000000",
+    expect(fields.encrypted).toBe(1);
+    expect(expected.padLen).toBe(3);
+    expect(decrypted).toEqual(
+      hex(expected.plaintext),
     );
   });
 
-  it("encodes an empty payload with pad_len zero", () => {
+  it("decrypts the encrypted empty payload to an empty plaintext", async () => {
     const expected = vector(
       "encrypted_unsigned_empty",
     );
 
-    expect(expected.payload).toBe("00000000");
-    expect(expected.plaintext).toBe("");
+    const fields = headerFields(expected.header);
+
+    const decrypted = await decryptFrame(
+      storeWithKey(),
+      new Uint8Array(),
+      { remaining: 0 },
+      hex(expected.frame),
+    );
+
+    expect(fields.encrypted).toBe(1);
+    expect(expected.padLen).toBe(0);
+    expect(decrypted).toEqual(
+      new Uint8Array(),
+    );
   });
 
   it("places the tag before the signature", () => {
@@ -377,6 +394,7 @@ describe("Frame errors", () => {
     );
 
     const encoded = hex(expected.frame);
+
     encoded.set(
       encoded.slice(0, encoded.length - 16),
     );
@@ -395,3 +413,4 @@ describe("Frame errors", () => {
     )).toThrow();
   });
 });
+
