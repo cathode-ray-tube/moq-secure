@@ -46,6 +46,20 @@ function concat(...parts: Uint8Array[]): Uint8Array {
   return result;
 }
 
+function encodeUint32BE(value: number): Uint8Array {
+  if (
+    !Number.isSafeInteger(value) ||
+    value < 0 ||
+    value > 0xffffffff
+  ) {
+    throw new RangeError("padLen must be a uint32");
+  }
+
+  const result = new Uint8Array(4);
+  new DataView(result.buffer).setUint32(0, value, false);
+  return result;
+}
+
 export class WireHeader {
   constructor(
     public readonly magic: Uint8Array,
@@ -295,7 +309,7 @@ export class Frame {
       //
       //   uint32be(padLen) || zero padding || plaintext
       //
-      // Therefore decrypt the complete payload before removing padding.
+      // The pad_len field is part of the encrypted plaintext.
       paddedPlaintext = aeadDecrypt(
         key,
         this.header.keyId,
@@ -305,7 +319,9 @@ export class Frame {
         this.tag,
       );
     } else {
-      // Cleartext payload has the same layout.
+      // Cleartext payload has the same layout:
+      //
+      //   uint32be(padLen) || zero padding || plaintext
       paddedPlaintext = this.payload;
     }
 
@@ -352,14 +368,14 @@ export async function encryptFrame(
 
   header.validate();
 
-  // Produces:
+  // The plaintext representation is:
   //
   //   uint32be(padLen) || zero padding || plaintext
   //
-  // This entire value is encrypted for encrypted frames.
-  const paddedPlaintext = prependZeroPadding(
-    plaintext,
-    padLen,
+  // For encrypted frames, the complete value is encrypted.
+  const paddedPlaintext = concat(
+    encodeUint32BE(padLen),
+    prependZeroPadding(plaintext, padLen),
   );
 
   let payload: Uint8Array;
@@ -384,7 +400,7 @@ export async function encryptFrame(
       paddedPlaintext,
     );
 
-    // payload is ciphertext only. The 16-byte tag is stored separately.
+    // The tag is stored separately by Frame.
     payload = encryptedResult.ciphertext;
     tag = encryptedResult.tag;
   } else {
