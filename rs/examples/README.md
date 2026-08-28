@@ -10,4 +10,4 @@ Build all examples from the repository root:
 
 ```bash
 cargo build --workspace
-``
+```
