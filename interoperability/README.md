@@ -158,7 +158,7 @@ header || ciphertext || tag || optional_signature
 
 ### 9. AEAD AAD (Additional Authenticated Data)  
 
-Exactly the encoded 28‑byte header:  
+Exactly the encoded 17‑byte header:  
 
 ```
 magic
@@ -168,7 +168,6 @@ ctr
 n_signed
 sig_flag
 encrypted
-pad_len
 ```  
 
 *The signature trailer is **never** part of the AAD.*  
@@ -203,7 +202,9 @@ zero bytes × padLen || plaintext
 - **Encrypted mode:** padded value is encrypted.  
 - **Unencrypted mode:** padded value is stored directly.  
 
-Padding is removed only after decryption or direct payload retrieval.  
+Padding is removed only after decryption or direct payload retrieval.
+
+PadLen field is a 4-byte integer (big-endian) and forms the first 4 bytes of the payload whether encrypted or unencrypted.
 
 ---  
 
