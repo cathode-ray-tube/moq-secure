@@ -12,7 +12,7 @@
     "pretest": "npm run generate-test-vectors",
     "test": "npm test --workspace js",
     "test:watch": "npm run test:watch --workspace js",
-    "test-rust": "npm run generate-test-vectors && cargo test"
+    "test-rust": "npm run generate-test-vectors && cargo test",
     "typecheck": "npm run typecheck --workspace js",
     "vectors:generate": "npm run generate --workspace test-vectors"
   }
