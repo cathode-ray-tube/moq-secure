@@ -379,7 +379,7 @@ export async function encryptFrame(
   );
 
   let payload: Uint8Array;
-  let tag = new Uint8Array(AEAD_TAG_LEN);
+  let tag: Uint8Array<ArrayBufferLike> = new Uint8Array(AEAD_TAG_LEN);
 
   if (encrypted === 1) {
     const key = keyStore.aeadKey(keyId);
