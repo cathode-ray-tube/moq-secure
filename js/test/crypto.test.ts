@@ -33,6 +33,38 @@ const hex = (value: string): Uint8Array =>
     value.match(/../g)?.map((part) => parseInt(part, 16)) ?? [],
   );
 
+const encodeUint32BE = (value: number): Uint8Array =>
+  Uint8Array.from([
+    (value >>> 24) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 8) & 0xff,
+    value & 0xff,
+  ]);
+
+const prependZeroPadding = (
+  plaintext: Uint8Array,
+  padLen: number,
+): Uint8Array => {
+  const padded = new Uint8Array(padLen + plaintext.length);
+  padded.set(plaintext, padLen);
+  return padded;
+};
+
+const concat = (...values: Uint8Array[]): Uint8Array => {
+  const result = new Uint8Array(
+    values.reduce((length, value) => length + value.length, 0),
+  );
+
+  let offset = 0;
+
+  for (const value of values) {
+    result.set(value, offset);
+    offset += value.length;
+  }
+
+  return result;
+};
+
 function readU64BE(bytes: Uint8Array, offset: number): bigint {
   let value = 0n;
 
@@ -67,42 +99,14 @@ describe("crypto", () => {
   it("matches the generated encrypted empty-frame vector", () => {
     const expected = frameVector("encrypted_unsigned_empty");
     const header = hex(expected.header);
-    const payload = hex(expected.payload);
-
-    const keyId = header[5];
-    const ctr = readU64BE(header, 6);
-
-    const result = aeadEncrypt(
-      key,
-      keyId,
-      ctr,
-      header,
-      payload,
-    );
-
-    expect(result.ciphertext).toEqual(
-      new Uint8Array(),
-    );
-
-    expect(result.tag).toEqual(hex(expected.tag));
-
-    expect(
-      aeadDecrypt(
-        key,
-        keyId,
-        ctr,
-        header,
-        result.ciphertext,
-        result.tag,
-      ),
-    ).toEqual(payload);
-  });
-
-  it("matches the generated encrypted binary-frame vector", () => {
-    const expected = frameVector("encrypted_unsigned_binary");
-    const header = hex(expected.header);
-    const payload = hex(expected.payload);
     const serialized = hex(expected.frame);
+    const tag = hex(expected.tag);
+
+    const plaintext = hex(expected.plaintext);
+    const paddedPlaintext = concat(
+      encodeUint32BE(expected.padLen),
+      prependZeroPadding(plaintext, expected.padLen),
+    );
 
     const keyId = header[5];
     const ctr = readU64BE(header, 6);
@@ -112,17 +116,17 @@ describe("crypto", () => {
       keyId,
       ctr,
       header,
-      payload,
+      paddedPlaintext,
     );
 
     expect(result.ciphertext).toEqual(
       serialized.slice(
         header.length,
-        serialized.length - 16,
+        serialized.length - tag.length,
       ),
     );
 
-    expect(result.tag).toEqual(hex(expected.tag));
+    expect(result.tag).toEqual(tag);
 
     expect(
       aeadDecrypt(
@@ -133,7 +137,62 @@ describe("crypto", () => {
         result.ciphertext,
         result.tag,
       ),
-    ).toEqual(payload);
+    ).toEqual(paddedPlaintext);
+  });
+
+  it("matches the generated encrypted binary-frame vector", () => {
+    const expected = frameVector("encrypted_unsigned_binary");
+    const header = hex(expected.header);
+    const serialized = hex(expected.frame);
+    const tag = hex(expected.tag);
+
+    const paddedPlaintext = Uint8Array.from([
+      0x00,
+      0x00,
+      0x00,
+      0x03, // pad_len = 3
+      0x00,
+      0x00,
+      0x00, // three zero-padding bytes
+      0x00,
+      0x01,
+      0x02,
+      0x7f,
+      0x80,
+      0xfe,
+      0xff,
+    ]);
+
+    const keyId = header[5];
+    const ctr = readU64BE(header, 6);
+
+    const result = aeadEncrypt(
+      key,
+      keyId,
+      ctr,
+      header,
+      paddedPlaintext,
+    );
+
+    expect(result.ciphertext).toEqual(
+      serialized.slice(
+        header.length,
+        serialized.length - tag.length,
+      ),
+    );
+
+    expect(result.tag).toEqual(tag);
+
+    expect(
+      aeadDecrypt(
+        key,
+        keyId,
+        ctr,
+        header,
+        result.ciphertext,
+        result.tag,
+      ),
+    ).toEqual(paddedPlaintext);
   });
 
   it("round-trips binary plaintext", () => {
