@@ -1,4 +1,4 @@
-## moq-secure-chat-cli
+# moq-secure-chat-cli
 
 This demonstrates [moq-secure](https://github.com/cathode-ray-tube/moq-secure) end-to-end encryption and signing of text chat messages in the terminal. It implements [moq-secure-chat](https://github.com/cathode-ray-tube/moq-secure/tree/main/rs/moq-secure-chat), a wrapper providing chat functionality around the encryption/signing library, [moq-secure](https://github.com/cathode-ray-tube/moq-secure/tree/main/rs/moq-secure).
 
