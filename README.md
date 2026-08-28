@@ -80,7 +80,7 @@ Only encrypts the payload so it should work with any MOQ implementation (moq-lit
 
 While aimed at MOQ, with some additional wiring it could encrypt and sign data sent via other transports (such as WebSockets).
 
-This repo contains implementations in rust and javascript. Compatability considerations between the two are in [interoperability](https://github.com/cathode-ray-tube/moq-secure/blob/main/interoperability/README.md)
+This repo contains implementations in [rust](https://github.com/cathode-ray-tube/moq-secure/tree/main/rs) and [javascript](https://github.com/cathode-ray-tube/moq-secure/tree/main/js). Compatability considerations between the two are in [interoperability](https://github.com/cathode-ray-tube/moq-secure/blob/main/interoperability/README.md)
 
 ## Tests 
 
