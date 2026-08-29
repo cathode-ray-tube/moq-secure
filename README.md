@@ -10,7 +10,7 @@ A fixed format for end-to-end encrypting **media payloads** carried by **Media O
 
 > **Payload-Only Encryption:** MOQ is a content-agnostic transport format. MOQ-Secure encrypts only the frame’s media payload bytes. Transport framing and routing remain unchanged.
 
-## Why this exists
+## Purpose
 
 People increasingly want to protect their communications from pervasive monitoring and mass surveillance. At the same time, audiences need confidence that media is genuine: in an era of deepfakes, you often can’t tell whether a video or audio clip truly came from the person it claims to be.
 
