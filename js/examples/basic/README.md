@@ -9,6 +9,8 @@ This example demonstrates a basic encrypted `moq-secure` frame round trip:
 5. Decrypt the serialized frame.
 6. Print the recovered plaintext.
 
+The example uses encryption without signatures. The nSigned value is 0, so the placeholder signing keys are not used.
+
 ## Run
 
 From the monorepo root:
@@ -27,5 +29,3 @@ hello from moq-secure
 ## Source
 
 The example implementation is in `src/index.ts`
-
-The example uses encryption without signatures. The nSigned value is 0, so the placeholder signing keys are not used.
