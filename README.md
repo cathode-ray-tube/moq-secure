@@ -93,7 +93,7 @@ npm run vectors:generate
 
 This will populate the `frames.json` file in the `test-vectors` directory.
 
-Run **rust** tests, from monorepo root (script automatically generates test vectors first:
+Run **rust** tests, from monorepo root (script automatically generates test vectors first):
 
 ```bash
 npm run test-rust
