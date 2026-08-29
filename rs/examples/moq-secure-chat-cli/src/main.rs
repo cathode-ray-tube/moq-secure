@@ -2,7 +2,12 @@ use anyhow::{Context, Result};
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use moq_net::{Origin, Path};
-use moq_secure_chat::{ChatKeys, ChatPublisher, ChatSubscriber};
+use moq_secure_chat::{
+    ChatPublisher,
+    ChatSubscriber,
+    PublisherKeys,
+    SubscriberKeys,
+};
 use rand::RngCore;
 use url::Url;
 
@@ -38,11 +43,13 @@ struct Cli {
     #[arg(long)]
     aead_key: Option<String>,
 
-    /// Ed25519 private key seed as hex or base64.
-    /// If omitted, publish mode generates one.
-    #[arg(long)]
-    signing_private_seed: Option<String>,
-
+    /// Ed25519 signing seed: exactly 32 raw bytes encoded as hex or Base64.
+    ///
+    /// This is the seed used to derive the private signing key. It is not a PEM,
+    /// PKCS#8, OpenSSH, expanded, or 64-byte private-key representation.
+    #[arg(long = "ed25519-signing-seed", alias = "signing-private-seed")]
+    ed25519_signing_seed: Option<String>,
+    
     /// Ed25519 signing public verify key as hex or base64.
     /// Required in subscribe mode.
     #[arg(long)]
@@ -131,17 +138,20 @@ async fn main() -> Result<()> {
 
     match cli.role {
         Role::Publish {} => {
-            let signing_private_seed =
-                cli.signing_private_seed
-                    .unwrap_or_else(gen_signing_private_seed_hex);
+            let signing_seed = cli
+        .ed25519_signing_seed
+        .unwrap_or_else(gen_ed25519_signing_seed_hex);
 
-            let keys = ChatKeys::from_strings(
-                key_id,
-                &aead_key,
-                &signing_private_seed,
-            )
-            .context("failed to construct ChatKeys")?;
-
+        let keys = PublisherKeys::from_strings(
+        key_id,
+        &aead_key,
+        &signing_seed,
+        )
+        .context(
+        "failed to construct publisher keys; \
+         the Ed25519 signing seed must decode to exactly 32 bytes",
+        )?;
+        
             let mut broadcast = origin
                 .create_broadcast(
                     &broadcast_name,
@@ -151,10 +161,10 @@ async fn main() -> Result<()> {
 
             // Every participant gets a unique broadcast, while all chat
             // messages use the same track name within that broadcast.
-            let track_producer = broadcast
-                .create_track(CHAT_TRACK.to_owned(), None)
-                .context("failed to create chat track")?;
-
+           let track_producer = broadcast
+            .create_track(CHAT_TRACK.to_owned(), None)
+            .context("failed to create chat track")?;
+            
             let pwd_bin: PathBuf =
                 env::current_dir()?.join("moq-secure-chat-cli");
             let bin = shell_escape(&pwd_bin.to_string_lossy());
@@ -242,12 +252,12 @@ async fn main() -> Result<()> {
                 .signing_public_key
                 .context("--signing-public-key is required in subscribe mode")?;
 
-            let keys = ChatKeys::from_strings_public_verify(
-                key_id,
-                &aead_key,
-                &signing_public,
-            )
-            .context("failed to construct ChatKeys")?;
+            let keys = SubscriberKeys::from_strings(
+                    key_id,
+                    &aead_key,
+                    &signing_public,
+                    )
+                    .context("failed to construct subscriber keys")?;
 
             let reconnect = client
                 .with_subscriber(origin.clone())
