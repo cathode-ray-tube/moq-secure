@@ -2,12 +2,7 @@ use anyhow::{Context, Result};
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use moq_net::{Origin, Path};
-use moq_secure_chat::{
-    ChatPublisher,
-    ChatSubscriber,
-    PublisherKeys,
-    SubscriberKeys,
-};
+use moq_secure_chat::{ChatPublisher, ChatSubscriber, PublisherKeys, SubscriberKeys};
 use rand::RngCore;
 use url::Url;
 
@@ -45,12 +40,12 @@ struct Cli {
 
     /// Ed25519 signing seed: exactly 32 raw bytes encoded as hex or Base64.
     ///
-    /// This is the seed used to derive the private signing key. It is not a PEM,
-    /// PKCS#8, OpenSSH, expanded, or 64-byte private-key representation.
+    /// This is the seed used to derive the private signing key. It is not a
+    /// PEM, PKCS#8, OpenSSH, expanded, or 64-byte private-key representation.
     #[arg(long = "ed25519-signing-seed", alias = "signing-private-seed")]
     ed25519_signing_seed: Option<String>,
-    
-    /// Ed25519 signing public verify key as hex or base64.
+
+    /// Ed25519 signing public verification key as hex or Base64.
     /// Required in subscribe mode.
     #[arg(long)]
     signing_public_key: Option<String>,
@@ -85,7 +80,7 @@ fn gen_aead_key_hex() -> String {
     hex::encode(bytes)
 }
 
-fn gen_signing_private_seed_hex() -> String {
+fn gen_signing_seed_hex() -> String {
     let mut seed = [0u8; 32];
     rand::rngs::OsRng.fill_bytes(&mut seed);
     hex::encode(seed)
@@ -117,7 +112,7 @@ async fn main() -> Result<()> {
         (Role::Publish {}, None) => random_broadcast_hex(),
         (Role::Subscribe, Some(name)) => name.clone(),
         (Role::Subscribe, None) => {
-            anyhow::bail!("--broadcast is required in subscribe mode")
+            anyhow::bail!("--broadcast is required in subscribe mode");
         }
     };
 
@@ -139,19 +134,19 @@ async fn main() -> Result<()> {
     match cli.role {
         Role::Publish {} => {
             let signing_seed = cli
-        .ed25519_signing_seed
-        .unwrap_or_else(gen_ed25519_signing_seed_hex);
+                .ed25519_signing_seed
+                .unwrap_or_else(gen_signing_seed_hex);
 
-        let keys = PublisherKeys::from_strings(
-        key_id,
-        &aead_key,
-        &signing_seed,
-        )
-        .context(
-        "failed to construct publisher keys; \
-         the Ed25519 signing seed must decode to exactly 32 bytes",
-        )?;
-        
+            let keys = PublisherKeys::from_strings(
+                key_id,
+                &aead_key,
+                &signing_seed,
+            )
+            .context(
+                "failed to construct publisher keys; \
+                 the Ed25519 signing seed must decode to exactly 32 bytes",
+            )?;
+
             let mut broadcast = origin
                 .create_broadcast(
                     &broadcast_name,
@@ -161,10 +156,10 @@ async fn main() -> Result<()> {
 
             // Every participant gets a unique broadcast, while all chat
             // messages use the same track name within that broadcast.
-           let track_producer = broadcast
-            .create_track(CHAT_TRACK.to_owned(), None)
-            .context("failed to create chat track")?;
-            
+            let track_producer = broadcast
+                .create_track(CHAT_TRACK.to_owned(), None)
+                .context("failed to create chat track")?;
+
             let pwd_bin: PathBuf =
                 env::current_dir()?.join("moq-secure-chat-cli");
             let bin = shell_escape(&pwd_bin.to_string_lossy());
@@ -233,10 +228,12 @@ async fn main() -> Result<()> {
             });
 
             let result: Result<()> = tokio::select! {
-                res = reconnect.closed() => res.map_err(Into::into),
+                res = reconnect.closed() => {
+                    res.map_err(Into::into)
+                }
 
                 res = stdin_task => {
-                    res.map_err(|e| anyhow::anyhow!(e))??;
+                    res.map_err(|error| anyhow::anyhow!(error))??;
                     Ok(())
                 }
 
@@ -253,11 +250,11 @@ async fn main() -> Result<()> {
                 .context("--signing-public-key is required in subscribe mode")?;
 
             let keys = SubscriberKeys::from_strings(
-                    key_id,
-                    &aead_key,
-                    &signing_public,
-                    )
-                    .context("failed to construct subscriber keys")?;
+                key_id,
+                &aead_key,
+                &signing_public,
+            )
+            .context("failed to construct subscriber keys")?;
 
             let reconnect = client
                 .with_subscriber(origin.clone())
@@ -279,7 +276,9 @@ async fn main() -> Result<()> {
 
             loop {
                 tokio::select! {
-                    res = reconnect.closed() => return Ok(res?),
+                    res = reconnect.closed() => {
+                        return Ok(res?);
+                    }
 
                     Some(moq_net::announce::Update { broadcast, .. }) = origin.next() => {
                         match broadcast {
@@ -309,6 +308,7 @@ async fn main() -> Result<()> {
                                                         message
                                                     );
                                                 }
+
                                                 Err(_) => {
                                                     eprintln!(
                                                         "(non-UTF-8 message) {} bytes",
@@ -322,7 +322,9 @@ async fn main() -> Result<()> {
                             }
 
                             None => {
-                                tracing::warn!("broadcast offline, waiting...");
+                                tracing::warn!(
+                                    "broadcast offline, waiting..."
+                                );
                             }
                         }
                     }
