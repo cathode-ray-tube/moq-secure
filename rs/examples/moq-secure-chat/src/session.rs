@@ -1,38 +1,27 @@
 use anyhow::Context;
+use ed25519_dalek::VerifyingKey;
 use moq_secure::{
     wire::{decrypt_frame, encrypt_frame},
     InMemoryKeyStore,
 };
 
-use crate::keys::ChatKeys;
+use crate::keys::{PublisherKeys, SubscriberKeys};
 
 pub struct ChatSession {
-    pub keys: ChatKeys,
     pub broadcast: String,
     pub track: String,
 }
 
 impl ChatSession {
-    pub fn new(keys: ChatKeys, broadcast: String, track: String) -> Self {
-        Self {
-            keys,
-            broadcast,
-            track,
-        }
-    }
-
-    fn keystore(&self) -> InMemoryKeyStore {
-        let mut keystore = InMemoryKeyStore::empty();
-        keystore.set_key(self.keys.key_id, self.keys.aead_key);
-        keystore
+    pub fn new(broadcast: String, track: String) -> Self {
+        Self { broadcast, track }
     }
 }
 
-/// Publisher publishes each chat message as one MoQ group containing one frame.
-///
-/// One chat message equals one group containing one object.
+/// Publisher publishes each chat message as one MoQ group containing one
+/// frame.
 pub struct ChatPublisher {
-    pub keys: ChatKeys,
+    pub keys: PublisherKeys,
     pub track: moq_net::track::Producer,
     pub n_signed: u8,
     pub crypto_ctr: u64,
@@ -40,11 +29,13 @@ pub struct ChatPublisher {
 }
 
 impl ChatPublisher {
-    pub fn new(track: moq_net::track::Producer, keys: ChatKeys) -> Self {
+    pub fn new(
+        track: moq_net::track::Producer,
+        keys: PublisherKeys,
+    ) -> Self {
         Self {
             keys,
             track,
-            // Every message is encrypted and signed.
             n_signed: 1,
             crypto_ctr: 0,
             group_ctr: 0,
@@ -57,60 +48,55 @@ impl ChatPublisher {
         keystore
     }
 
-    pub async fn send_message(&mut self, plaintext: &[u8]) -> anyhow::Result<()> {
+    pub async fn send_message(
+        &mut self,
+        plaintext: &[u8],
+    ) -> anyhow::Result<()> {
         let crypto_ctr = self.crypto_ctr;
         self.crypto_ctr = self.crypto_ctr.wrapping_add(1);
 
         let group_id = self.group_ctr;
         self.group_ctr = self.group_ctr.wrapping_add(1);
 
-        // No padding for now.
-        let pad_len = 0u32;
-
-        // Build the keystore expected by moq-secure.
         let keystore = self.keystore();
 
         let frame = encrypt_frame(
             &keystore,
-            &self.keys.signing_private,
+            &self.keys.signing_key,
             self.keys.key_id,
             crypto_ctr,
             self.n_signed,
             true,
             1,
-            pad_len,
+            0,
             plaintext,
         )
         .context("encrypt_frame failed")?;
 
-        let frame_bytes = frame.serialize();
-
-        // group_id must be unique across sends.
         let mut group = self
             .track
             .create_group(group_id.into())
-            .context("create_group")?;
+            .context("create_group failed")?;
 
         group.write_frame(
             moq_native::moq_net::Timestamp::now(),
-            frame_bytes,
+            frame.serialize(),
         )?;
 
         group.finish()?;
-
         Ok(())
     }
 
     pub fn finish(self) {
-        // Dropping the producer normally closes it.
         drop(self.track);
     }
 }
 
-/// Subscriber receives chat frames, verifies their signatures, and decrypts them.
+/// Subscriber receives chat frames, verifies their signatures, and decrypts
+/// them. It has no private signing key.
 pub struct ChatSubscriber {
-    pub verify_key: ed25519_dalek::VerifyingKey,
-    pub keys: ChatKeys,
+    pub verify_key: VerifyingKey,
+    pub keys: SubscriberKeys,
     pub track: moq_net::track::Subscriber,
     pub lease_remaining: u8,
 }
@@ -118,10 +104,12 @@ pub struct ChatSubscriber {
 impl ChatSubscriber {
     pub fn new(
         track: moq_net::track::Subscriber,
-        keys: ChatKeys,
+        keys: SubscriberKeys,
     ) -> Self {
+        let verify_key = keys.signing_verify_key;
+
         Self {
-            verify_key: keys.signing_verify,
+            verify_key,
             keys,
             track,
             lease_remaining: 0,
