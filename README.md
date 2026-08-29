@@ -84,7 +84,7 @@ This repo contains implementations in [rust](https://github.com/cathode-ray-tube
 
 ## Tests 
 
-**Test vectors** alone can be generated, from monorepo root (use commands below to generate **and** run tests):
+**Test vectors** alone can be generated, from monorepo root (use commands further below to generate **and** run tests):
 
 ```bash
 npm install
