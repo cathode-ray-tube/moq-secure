@@ -20,6 +20,14 @@ MOQ-Secure not yet added.
  - Audio and video decoding and rendering.
  - MOQ playback using GStreamer plugin.
 
+## Prerequisites
+
+Rust installed:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
 ## Run
 From main repo root:
 ```bash
