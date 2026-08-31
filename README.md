@@ -2,7 +2,7 @@
 
 [![JavaScript Tests](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/test-js.yml/badge.svg)](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/test-js.yml)
 [![Rust Tests](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/test-rust.yml/badge.svg)](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/test-rust.yml)
-[![CodeQL](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/codeql.yml/badge.svg)](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/codeql.yml)
+[![CodeQL](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/github-code-scanning/codeql)
 
 # MOQ-Secure Encryption & Signing
 
