@@ -86,22 +86,13 @@ This repo contains implementations in [rust](https://github.com/cathode-ray-tube
 
 ## Tests 
 
-**Test vectors** alone can be generated, from monorepo root (use commands further below to generate **and** run tests):
-
-```bash
-npm install
-npm run vectors:generate
-```
-
-This will populate the `frames.json` file in the `test-vectors` directory.
-
-Run **rust** tests, from monorepo root (script automatically generates test vectors first):
+Run **rust** tests, from monorepo root (script automatically generates test vectors first, populating `frames.json` file in the `test-vectors` folder):
 
 ```bash
 npm run test-rust
 ```
 
-Run **javascript** tests, from monorepo root (script automatically generates test vectors first):
+Run **javascript** tests, from monorepo root (script automatically generates test vectors first, populating `frames.json` file in the `test-vectors` folder):
 
 ```bash
 npm test
