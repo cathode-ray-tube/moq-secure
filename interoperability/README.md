@@ -345,25 +345,16 @@ Care should be taken during any key-generation additions to the code, ensuring r
 
 ### 20. Tests
 
-**Test vectors** can be generated, from monorepo root:
+Run **rust** tests, from monorepo root (script generates test vectors first, populating `frames.json` file in the `test-vectors` folder):
 
 ```bash
-npm install
-npm run vectors:generate
+npm run test-rust
 ```
 
-This will populate the `frames.json` file in the `test-vectors` directory.
-
-Run **rust** tests, from monorepo root, after first running the above commands to generate the test vectors:
+Run **javascript** tests, from monorepo root (script generates test vectors first, populating `frames.json` file in the `test-vectors` folder):
 
 ```bash
-cargo test
-```
-
-Run **javascript** tests, from monorepo root (command automatically generates test vectors first):
-
-```bash
-npm test 
+npm test
 ```
 
 *Wire format and cryptographic bytes are the compatibility boundaries; internal class names, module layout, or async vs sync APIs may differ.* 
