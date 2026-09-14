@@ -20,6 +20,8 @@ MOQ-Secure is designed to provide:
 - **Authenticity** - so frames can be verified as coming from a broadcaster
 - **Flexibility** - balancing security and performance
 
+Publishers are able to use **any** public MOQ CDN, with the hosting provider unable to see the content. Consumers can verify the creator of the content, wherever they receive it from.
+
 ## Quick Start (moq-secure-chat-cli):
 
 This demonstrates moq-secure end-to-end encryption and signing of text chat messages in the terminal.
