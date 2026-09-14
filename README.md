@@ -17,7 +17,7 @@ People increasingly want to protect their communications from pervasive monitori
 MOQ-Secure is designed to provide:
 - **Privacy** for the media payload - so content can’t be inspected in transit
 - **Integrity** - so tampering is detected
-- **Authenticity** - so frames can be verified as coming from a broadcaster
+- **Authenticity** - so frames can be verified as coming from a particular publisher
 - **Flexibility** - balancing security and performance
 
 Publishers are able to use **any** public MOQ CDN, with the hosting provider unable to see the content. Consumers can verify the creator of the content, wherever they receive it from.
