@@ -1,7 +1,6 @@
 // src/nonce.ts
-import { sha256 } from "@noble/hashes/sha2.js";
 
-export const NONCE_PREFIX_5 = new TextEncoder().encode("nonce");
+export const NONCE_PREFIX_3 = new TextEncoder().encode("non");
 
 export function deriveNonce12(keyId: number, ctr: bigint): Uint8Array {
   if (!Number.isInteger(keyId) || keyId < 0 || keyId > 255) {
@@ -12,12 +11,13 @@ export function deriveNonce12(keyId: number, ctr: bigint): Uint8Array {
     throw new RangeError("ctr must fit in an unsigned 64-bit integer");
   }
 
-  const input = new Uint8Array(5 + 1 + 8);
-  input.set(NONCE_PREFIX_5, 0);
-  input[5] = keyId;
+  // "non" (3 bytes) || keyId (1 byte) || ctr (8 bytes) = 12 bytes
+  const nonce = new Uint8Array(12);
+  nonce.set(NONCE_PREFIX_3, 0);
+  nonce[3] = keyId;
 
-  const view = new DataView(input.buffer);
-  view.setBigUint64(6, ctr, false);
+  const view = new DataView(nonce.buffer);
+  view.setBigUint64(4, ctr, false); // big-endian
 
-  return sha256(input).slice(0, 12);
+  return nonce;
 }
