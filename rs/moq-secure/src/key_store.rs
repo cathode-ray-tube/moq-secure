@@ -1,7 +1,7 @@
 use base64::Engine;
 use zeroize::{Zeroize, Zeroizing};
 
-pub trait KeyStore {
+pub trait KeyStore Send + Sync {
     fn aead_key(&self, key_id: u8) -> Option<&[u8; 32]>;
 }
 
