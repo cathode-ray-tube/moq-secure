@@ -1,17 +1,11 @@
-use sha2::{Digest, Sha256};
-
-pub const NONCE_PREFIX_5: [u8; 5] = *b"nonce";
+pub const NONCE_PREFIX_3: [u8; 3] = *b"non";
 
 pub fn derive_nonce12(key_id: u8, ctr: u64) -> [u8; 12] {
-    let mut hasher = Sha256::new();
-    hasher.update(NONCE_PREFIX_5);
-    hasher.update([key_id]);
-    hasher.update(ctr.to_be_bytes());
+	let mut nonce = [0u8; 12];
 
-    let digest = hasher.finalize();
+	nonce[..3].copy_from_slice(NONCE_PREFIX_3);
+	nonce[3] = key_id;
+	nonce[4..].copy_from_slice(&ctr.to_be_bytes());
 
-    digest[..12]
-        .try_into()
-        .expect("SHA-256 slice is exactly 12 bytes")
+	nonce
 }
-
