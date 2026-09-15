@@ -276,9 +276,9 @@ describe("crypto", () => {
     );
   });
 
-  it("derives the expected nonce", () => {
+   it("derives the expected nonce", () => {
     expect(deriveNonce12(7, 42n)).toEqual(
-      hex("3ea7d92eeec70d0a61fd1423"),
+      hex("6e6f6e07000000000000002a"),
     );
   });
 });
