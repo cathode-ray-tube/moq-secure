@@ -491,7 +491,7 @@ Both sender and receiver MUST agree on:
 - Nonce derivation:
 
   ```text
-  SHA256("nonce" || key_id || ctr)[0..12)
+ "non" || key_id || ctr
   ```
 
 - AEAD AAD:
