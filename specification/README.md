@@ -111,15 +111,14 @@ The 12-byte ChaCha20-Poly1305 nonce is derived from `key_id` and `ctr`; it is no
 Use the following derivation:
 
 ```text
-nonce_tag = ASCII("nonce")
-nonce_input = nonce_tag || key_id(1 byte) || ctr(8 bytes)
-nonce12 = SHA256(nonce_input)[0..12)
+nonce_tag = ASCII("non")
+nonce = nonce_tag || key_id(1 byte) || ctr(8 bytes)
 ```
 
 In hexadecimal, `nonce_tag` is:
 
 ```text
-6e 6f 6e 63 65
+6e 6f 6e
 ```
 
 Both the sender and receiver MUST use the same nonce derivation.
