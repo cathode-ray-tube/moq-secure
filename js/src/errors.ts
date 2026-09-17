@@ -29,6 +29,13 @@ export class MoqSecureError extends Error {
     this.value = value;
   }
 
+  static counterExhausted(): MoqSecureError {
+  return new MoqSecureError(
+    "CounterExhausted",
+    "encryption counter exhausted",
+  );
+  }
+
   static invalidMagic(): MoqSecureError {
     return new MoqSecureError("InvalidMagic", "invalid magic bytes");
   }
