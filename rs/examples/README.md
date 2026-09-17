@@ -11,3 +11,5 @@ Build all examples from the repository root:
 ```bash
 cargo build --workspace
 ```
+
+There are further examples in my fork of the moq repo, [here](https://github.com/cathode-ray-tube/moq/blob/dev/rs/moq-mux/examples/README.md).
