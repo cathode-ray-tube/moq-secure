@@ -2,6 +2,33 @@
 name = "moq-secure"
 version = "0.1.0"
 edition = "2021"
+description = "Encryption and signing for Media over Quic (MoQ)"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+
+categories = [
+    "cryptography",
+    "multimedia",
+]
+
+keywords = [
+    "media-over-quic",
+    "moq",
+    "encryption",
+    "signing",
+    "ed25519",
+]
+
+include = [
+    "src/**",
+    "tests/**",
+    "test-vectors/frames.json",
+    "Cargo.toml",
+    "Cargo.lock",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE-2.0",
+]
 
 [dependencies]
 bytes = "1"
