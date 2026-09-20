@@ -28,7 +28,7 @@ export interface SecureFactory {
 export const secureFactory: SecureFactory = {
   async generateIdentity(): Promise<Identity> {
     /*
-     * Example shape only:
+     * TODO, configure correctly:
 
      const encryptionKey = crypto.getRandomValues(
        new Uint8Array(32),
@@ -53,8 +53,7 @@ export const secureFactory: SecureFactory = {
     identity: Identity,
   ): Promise<SecureChatCodec> {
     /*
-     * Replace these constructors with your actual KeyStore
-     * initialization code.
+     * review/replace:.
 
      const keyStore = createKeyStore(
        identity.encryptionKey,
@@ -84,8 +83,7 @@ export const secureFactory: SecureFactory = {
     broadcasterPublicKey: Uint8Array,
   ): Promise<SecureChatCodec> {
     /*
-     * Replace these constructors with your actual KeyStore
-     * initialization code.
+     * review/replace:.
 
      const keyStore = createKeyStore(encryptionKey);
 
