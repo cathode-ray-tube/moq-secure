@@ -1976,7 +1976,6 @@ dependencies = [
  "base64",
  "bytes",
  "chacha20poly1305",
- "clap",
  "ed25519-dalek",
  "hex",
  "rand 0.8.7",
@@ -1985,6 +1984,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror 1.0.69",
+ "zeroize",
 ]
 
 [[package]]
