@@ -1,9 +1,10 @@
 [package]
 name = "moq-secure"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Encryption and signing for Media over Quic (MoQ)"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/cathode-ray-tube/moq-secure"
 readme = "README.md"
 
 categories = [
