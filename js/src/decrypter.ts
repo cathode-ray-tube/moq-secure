@@ -1,5 +1,5 @@
-import { decryptFrame } from "../secure/wire.js";
-import type { KeyStore } from "../secure/keys.js";
+import { decryptFrame } from "./wire.js";
+import type { KeyStore } from "./keys.js";
 
 export interface FrameDecrypter {
 	/**
