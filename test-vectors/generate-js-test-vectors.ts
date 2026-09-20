@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -188,9 +192,19 @@ const outputPath = join(
   "frames.json",
 );
 
+const rustOutputDirectory = fileURLToPath(
+  new URL("../rs/moq-secure/test-vectors/", import.meta.url),
+);
+
+const rustOutputPath = join(rustOutputDirectory, "frames.json");
+
 await writeFile(
   outputPath,
   `${JSON.stringify(output, null, 2)}\n`,
 );
 
+await mkdir(rustOutputDirectory, { recursive: true });
+await copyFile(outputPath, rustOutputPath);
+
 console.log(`wrote ${outputPath}`);
+console.log(`copied ${rustOutputPath}`);
