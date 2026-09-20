@@ -72,7 +72,7 @@ export const secureFactory: SecureFactory = {
       signingPrivateKey: identity.signingPrivateKey,
       keyId: 0,
       nSigned: 1,
-      maybeSign: false,
+      maybeSign: true,
       padLen: 0,
     });
 
