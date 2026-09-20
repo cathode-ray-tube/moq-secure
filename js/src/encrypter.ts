@@ -6,14 +6,10 @@ const MAX_U64 = 0xffff_ffff_ffff_ffffn;
 
 export interface FrameEncrypter {
 	/**
-	 * Encrypt a complete legacy-container payload.
+	 * Encrypts one complete application payload.
 	 *
-	 * The plaintext is:
-	 *
-	 *   timestamp varint || codec payload
-	 *
-	 * sequenceNumber is accepted for API compatibility with MoQ frame
-	 * encrypters. Moq Secure uses its own independent counter.
+	 * The sequence number is retained for compatibility with
+	 * media-frame encrypters. moq-secure uses its own counter.
 	 */
 	encrypt(
 		sequenceNumber: bigint | number,
