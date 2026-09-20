@@ -10,7 +10,7 @@ import type {
   SubscriptionConfig,
 } from "./types.ts";
 
-class MoqChatApp extends HTMLElement {
+class MoqSecureChat extends HTMLElement {
   #identity?: Identity;
   #publisher?: MoqChatPublisher;
   #subscriptions = new Map<
@@ -482,6 +482,6 @@ class MoqChatApp extends HTMLElement {
 }
 
 customElements.define(
-  "moq-chat-app",
-  MoqChatApp,
+  "moq-secure-chat",
+  MoqSecureChat,
 );
