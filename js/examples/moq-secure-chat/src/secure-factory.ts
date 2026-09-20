@@ -1,14 +1,14 @@
 import {
   MoqSecureDecrypter,
-} from "../../src/decrypter.js";
+} from "../../../src/decrypter.js";
 
 import {
   MoqSecureEncrypter,
-} from "../../src/encrypter.js";
+} from "../../../src/encrypter.js";
 
 import {
   InMemoryKeyStore,
-} from "../../src/keys.js";
+} from "../../../src/keys.js";
 
 import * as ed25519 from "@noble/ed25519";
 
