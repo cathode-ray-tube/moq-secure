@@ -1,5 +1,6 @@
-import { createHash } from "node:crypto";
 import * as ed25519 from "@noble/ed25519";
+import { sha512 } from "@noble/hashes/sha512";
+import { concatBytes } from "@noble/hashes/utils";
 
 import {
   AEAD_TAG_LEN,
@@ -17,14 +18,9 @@ import {
 } from "./padding.js";
 
 ed25519.hashes.sha512 = (...messages: Uint8Array[]) => {
-  const hash = createHash("sha512");
-
-  for (const message of messages) {
-    hash.update(message);
-  }
-
-  return new Uint8Array(hash.digest());
+  return sha512(concatBytes(...messages));
 };
+
 
 function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
   return a.length === b.length &&
