@@ -1,5 +1,5 @@
-import type { FrameDecrypter } from "./decrypter.js";
-import type { FrameEncrypter } from "./encrypter.js";
+import type { FrameDecrypter } from "../../src/decrypter.js";
+import type { FrameEncrypter } from "../../src/encrypter.js";
 import {
   decodeChatMessage,
   encodeChatMessage,
