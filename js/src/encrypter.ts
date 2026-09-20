@@ -1,6 +1,6 @@
-import { MoqSecureError } from "../secure/errors.js";
-import { encryptFrame } from "../secure/wire.js";
-import type { KeyStore } from "../secure/keys.js";
+import { MoqSecureError } from "./errors.js";
+import { encryptFrame } from "./wire.js";
+import type { KeyStore } from "./keys.js";
 
 const MAX_U64 = 0xffff_ffff_ffff_ffffn;
 
