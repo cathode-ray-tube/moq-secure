@@ -26,40 +26,41 @@ class MoqSecureChat extends HTMLElement {
   private render(): void {
     this.innerHTML = `
       <style>
-        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap");
 
         :host {
-          --bg: #050914;
-          --panel: rgba(10, 22, 45, 0.78);
-          --line: rgba(92, 180, 255, 0.2);
-          --text: #eaf6ff;
-          --muted: #829abb;
-          --blue: #38bdf8;
-          --cyan: #22d3ee;
-          --purple: #818cf8;
+          --blue-1: #031b3f;
+          --blue-2: #062d63;
+          --blue-3: #084d8d;
+          --electric: #38d9ff;
+          --electric-2: #6c7cff;
+          --text: #effaff;
+          --muted: #9ac3df;
 
           display: block;
-          min-height: 100vh;
-          overflow-x: hidden;
+          width: 100%;
+          height: 100dvh;
+          min-height: 560px;
+          overflow: hidden;
           color: var(--text);
+          font-family: "Inter", system-ui, sans-serif;
           background:
             radial-gradient(
-              circle at 8% 8%,
-              rgba(24, 105, 189, 0.32),
-              transparent 30%
+              circle at 12% 5%,
+              rgba(39, 174, 255, 0.7),
+              transparent 29%
             ),
             radial-gradient(
-              circle at 92% 20%,
-              rgba(73, 68, 191, 0.2),
-              transparent 28%
+              circle at 88% 85%,
+              rgba(48, 91, 255, 0.48),
+              transparent 34%
             ),
             linear-gradient(
               135deg,
-              #071225 0%,
-              #030711 48%,
-              #08162b 100%
+              #06265b 0%,
+              #031534 42%,
+              #07508e 100%
             );
-          font-family: "Inter", system-ui, sans-serif;
         }
 
         :host::before {
@@ -67,22 +68,22 @@ class MoqSecureChat extends HTMLElement {
           position: fixed;
           inset: 0;
           pointer-events: none;
-          opacity: 0.18;
+          opacity: 0.28;
           background-image:
             linear-gradient(
-              rgba(73, 157, 255, 0.08) 1px,
+              rgba(100, 220, 255, 0.14) 1px,
               transparent 1px
             ),
             linear-gradient(
               90deg,
-              rgba(73, 157, 255, 0.08) 1px,
+              rgba(100, 220, 255, 0.14) 1px,
               transparent 1px
             );
           background-size: 42px 42px;
           mask-image: linear-gradient(
             to bottom,
             black,
-            transparent 85%
+            transparent 95%
           );
         }
 
@@ -93,32 +94,35 @@ class MoqSecureChat extends HTMLElement {
         .app {
           position: relative;
           z-index: 1;
-          width: min(1240px, calc(100% - 36px));
+          display: flex;
+          flex-direction: column;
+          width: min(1280px, calc(100% - 32px));
+          height: 100%;
           margin: auto;
-          padding: 54px 0 70px;
+          padding: 20px 0;
         }
 
         header {
-          position: relative;
-          margin-bottom: 32px;
-          padding: 4px 0 12px;
+          flex: 0 0 auto;
+          margin-bottom: 15px;
+          padding-bottom: 10px;
         }
 
         header::after {
           content: "";
           display: block;
-          width: 110px;
+          width: 100px;
           height: 3px;
-          margin-top: 20px;
+          margin-top: 12px;
           border-radius: 99px;
           background: linear-gradient(
             90deg,
-            var(--cyan),
-            var(--purple)
+            var(--electric),
+            var(--electric-2)
           );
           box-shadow:
-            0 0 12px rgba(34, 211, 238, 0.8),
-            0 0 32px rgba(129, 140, 248, 0.5);
+            0 0 10px var(--electric),
+            0 0 28px var(--electric-2);
         }
 
         h1,
@@ -127,99 +131,118 @@ class MoqSecureChat extends HTMLElement {
         }
 
         h1 {
-          margin: 7px 0 0;
-          color: #f2fbff;
-          font-size: clamp(3rem, 8vw, 6.8rem);
+          margin: 4px 0 0;
+          color: #ffffff;
+          font-size: clamp(2.7rem, 6vw, 5.2rem);
           font-weight: 700;
-          letter-spacing: -0.095em;
-          line-height: 0.92;
+          letter-spacing: -0.09em;
+          line-height: 0.9;
           text-shadow:
-            0 0 12px rgba(56, 189, 248, 0.55),
-            0 0 38px rgba(56, 189, 248, 0.18);
+            0 0 12px rgba(56, 217, 255, 0.9),
+            0 0 36px rgba(56, 217, 255, 0.4);
         }
 
         h2 {
-          margin: 0 0 20px;
-          color: #f4fbff;
-          font-size: 1.15rem;
-          font-weight: 600;
-          letter-spacing: -0.035em;
+          margin: 0 0 13px;
+          color: #ffffff;
+          font-size: 1rem;
+          letter-spacing: -0.03em;
         }
 
         .muted {
-          color: var(--cyan);
-          font-size: 0.76rem;
-          font-weight: 700;
+          color: #86ebff;
+          font-size: 0.68rem;
+          font-weight: 800;
           letter-spacing: 0.16em;
           text-transform: uppercase;
         }
 
         .grid {
           display: grid;
-          grid-template-columns: 370px minmax(0, 1fr);
-          gap: 22px;
-          align-items: start;
+          grid-template-columns: 350px minmax(0, 1fr);
+          gap: 16px;
+          min-height: 0;
+          flex: 1;
+        }
+
+        aside {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          min-height: 0;
         }
 
         .card {
           position: relative;
-          padding: 24px;
+          padding: 16px;
           overflow: hidden;
-          border: 1px solid var(--line);
-          border-radius: 22px;
+          border: 1px solid rgba(91, 229, 255, 0.7);
+          border-radius: 16px;
           background:
             linear-gradient(
               145deg,
-              rgba(18, 47, 87, 0.72),
-              rgba(6, 16, 34, 0.84)
+              rgba(5, 56, 109, 0.87),
+              rgba(2, 24, 60, 0.88)
             );
           box-shadow:
-            0 24px 70px rgba(0, 0, 0, 0.34),
-            inset 0 1px rgba(255, 255, 255, 0.07);
-          backdrop-filter: blur(22px);
+            0 0 0 1px rgba(54, 192, 255, 0.12),
+            0 0 18px rgba(31, 200, 255, 0.18),
+            0 18px 48px rgba(0, 10, 35, 0.35),
+            inset 0 1px rgba(255, 255, 255, 0.13);
+          backdrop-filter: blur(18px);
+        }
+
+        aside .card {
+          flex: 1;
+          min-height: 0;
         }
 
         .card::before {
           content: "";
           position: absolute;
           top: 0;
-          right: 18%;
-          left: 18%;
-          height: 1px;
+          right: 16%;
+          left: 16%;
+          height: 2px;
           background: linear-gradient(
             90deg,
             transparent,
-            rgba(56, 189, 248, 0.8),
+            var(--electric),
             transparent
           );
+          box-shadow: 0 0 12px var(--electric);
         }
 
-        .card + .card {
-          margin-top: 18px;
+        main.card {
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+          min-height: 0;
+          padding: 13px;
         }
 
         label {
           display: grid;
-          gap: 8px;
-          margin-top: 17px;
-          color: #9db4d3;
-          font-size: 0.76rem;
-          font-weight: 600;
-          letter-spacing: 0.04em;
+          gap: 5px;
+          margin-top: 9px;
+          color: #b8d9eb;
+          font-size: 0.66rem;
+          font-weight: 700;
+          letter-spacing: 0.045em;
           text-transform: uppercase;
         }
 
         input,
         textarea {
           width: 100%;
-          border: 1px solid rgba(113, 174, 225, 0.2);
-          border-radius: 11px;
-          padding: 12px 13px;
+          border: 1px solid rgba(91, 218, 255, 0.42);
+          border-radius: 8px;
+          padding: 8px 10px;
           outline: none;
           color: var(--text);
-          background: rgba(2, 9, 22, 0.7);
+          background: rgba(1, 19, 47, 0.75);
           font: inherit;
-          font-size: 0.88rem;
+          font-size: 0.8rem;
           transition:
             border-color 160ms ease,
             box-shadow 160ms ease,
@@ -228,49 +251,48 @@ class MoqSecureChat extends HTMLElement {
 
         input::placeholder,
         textarea::placeholder {
-          color: #59718f;
+          color: #7199b7;
         }
 
         input:focus,
         textarea:focus {
-          border-color: var(--cyan);
-          background: rgba(4, 17, 36, 0.9);
+          border-color: #9af3ff;
+          background: rgba(1, 31, 68, 0.95);
           box-shadow:
-            0 0 0 3px rgba(34, 211, 238, 0.1),
-            0 0 20px rgba(34, 211, 238, 0.12);
+            0 0 0 2px rgba(56, 217, 255, 0.18),
+            0 0 15px rgba(56, 217, 255, 0.4);
         }
 
         input[readonly],
         textarea[readonly] {
-          color: #73d8ff;
-          border-color: rgba(56, 189, 248, 0.16);
-          background: rgba(7, 28, 51, 0.68);
+          color: #8deaff;
+          border-color: rgba(71, 220, 255, 0.52);
+          background: rgba(3, 39, 75, 0.78);
         }
 
         textarea {
-          min-height: 82px;
-          resize: vertical;
-          line-height: 1.5;
+          min-height: 54px;
+          resize: none;
+          line-height: 1.35;
         }
 
         button {
-          border: 1px solid rgba(125, 240, 255, 0.4);
-          border-radius: 11px;
-          padding: 12px 16px;
-          color: #03101d;
+          border: 1px solid rgba(169, 248, 255, 0.8);
+          border-radius: 8px;
+          padding: 9px 13px;
+          color: #00152b;
           background: linear-gradient(
             135deg,
-            #67e8f9 0%,
-            #38bdf8 50%,
-            #818cf8 100%
+            #8cf4ff,
+            #35d4ff 48%,
+            #7888ff
           );
           box-shadow:
-            0 0 16px rgba(56, 189, 248, 0.2),
-            inset 0 1px rgba(255, 255, 255, 0.55);
+            0 0 10px rgba(56, 217, 255, 0.5),
+            inset 0 1px rgba(255, 255, 255, 0.7);
           font: inherit;
-          font-size: 0.82rem;
+          font-size: 0.73rem;
           font-weight: 800;
-          letter-spacing: 0.015em;
           cursor: pointer;
           transition:
             transform 160ms ease,
@@ -279,50 +301,38 @@ class MoqSecureChat extends HTMLElement {
         }
 
         button:hover {
-          filter: brightness(1.14);
+          filter: brightness(1.15);
           transform: translateY(-2px);
           box-shadow:
-            0 0 24px rgba(56, 189, 248, 0.45),
-            inset 0 1px rgba(255, 255, 255, 0.65);
+            0 0 22px rgba(56, 217, 255, 0.8),
+            inset 0 1px rgba(255, 255, 255, 0.8);
         }
 
         button:active {
           transform: translateY(0);
         }
 
-        button.secondary {
-          color: #d6f5ff;
-          border-color: rgba(130, 180, 230, 0.22);
-          background: rgba(255, 255, 255, 0.07);
-          box-shadow: none;
-        }
-
         .actions {
           display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-          margin-top: 20px;
-        }
-
-        main.card {
-          min-width: 0;
-          padding: 18px;
+          gap: 8px;
+          margin-top: 11px;
         }
 
         #messages {
-          height: 570px;
-          overflow: auto;
-          padding: 14px;
-          border: 1px solid rgba(100, 167, 220, 0.12);
-          border-radius: 16px;
+          flex: 1;
+          min-height: 0;
+          overflow-y: auto;
+          padding: 10px;
+          border: 1px solid rgba(92, 220, 255, 0.42);
+          border-radius: 11px;
           background:
             radial-gradient(
               circle at 50% 0%,
-              rgba(24, 93, 158, 0.13),
-              transparent 45%
+              rgba(33, 171, 255, 0.23),
+              transparent 48%
             ),
-            rgba(1, 8, 19, 0.46);
-          scrollbar-color: #24648c transparent;
+            rgba(1, 16, 42, 0.6);
+          scrollbar-color: #39d9ff transparent;
           scrollbar-width: thin;
         }
 
@@ -331,56 +341,60 @@ class MoqSecureChat extends HTMLElement {
           display: grid;
           height: 100%;
           place-items: center;
-          color: #486682;
+          color: #87bbd7;
           font-family: "Space Grotesk", sans-serif;
-          font-size: 0.9rem;
+          font-size: 0.85rem;
           letter-spacing: 0.05em;
         }
 
         .message {
           max-width: 76%;
-          margin: 12px 0;
-          padding: 13px 16px;
-          border: 1px solid rgba(109, 170, 220, 0.14);
-          border-radius: 6px 18px 18px 18px;
-          color: #dff5ff;
-          background: rgba(21, 48, 82, 0.68);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
-          line-height: 1.5;
+          margin: 9px 0;
+          padding: 10px 13px;
+          border: 1px solid rgba(95, 218, 255, 0.42);
+          border-radius: 5px 14px 14px 14px;
+          color: #e9faff;
+          background: rgba(8, 79, 137, 0.75);
+          box-shadow:
+            0 0 10px rgba(45, 190, 255, 0.16),
+            0 7px 18px rgba(0, 10, 35, 0.2);
+          font-size: 0.86rem;
+          line-height: 1.4;
           animation: message-in 220ms ease-out;
         }
 
         .mine {
           margin-left: auto;
-          border-color: rgba(82, 226, 255, 0.28);
-          border-radius: 18px 6px 18px 18px;
+          border-color: rgba(166, 178, 255, 0.72);
+          border-radius: 14px 5px 14px 14px;
           background: linear-gradient(
             135deg,
-            rgba(20, 117, 164, 0.8),
-            rgba(73, 70, 164, 0.8)
+            rgba(8, 139, 180, 0.86),
+            rgba(65, 70, 177, 0.88)
           );
           box-shadow:
-            0 8px 28px rgba(25, 124, 198, 0.2),
-            inset 0 1px rgba(255, 255, 255, 0.12);
+            0 0 13px rgba(110, 134, 255, 0.28),
+            0 7px 20px rgba(0, 10, 35, 0.24);
         }
 
         .meta {
-          margin-bottom: 5px;
-          color: #78ddf7;
-          font-size: 0.7rem;
+          margin-bottom: 3px;
+          color: #87efff;
+          font-size: 0.63rem;
           font-weight: 800;
           letter-spacing: 0.08em;
           text-transform: uppercase;
         }
 
         .mine .meta {
-          color: #b9f7ff;
+          color: #d5faff;
         }
 
         form.composer {
           display: flex;
-          gap: 10px;
-          margin-top: 16px;
+          flex: 0 0 auto;
+          gap: 8px;
+          margin-top: 10px;
         }
 
         .composer input {
@@ -388,13 +402,13 @@ class MoqSecureChat extends HTMLElement {
         }
 
         .composer button {
-          min-width: 82px;
+          min-width: 70px;
         }
 
         @keyframes message-in {
           from {
             opacity: 0;
-            transform: translateY(8px);
+            transform: translateY(7px);
           }
 
           to {
@@ -403,37 +417,60 @@ class MoqSecureChat extends HTMLElement {
           }
         }
 
-        @media (max-width: 820px) {
+        @media (max-width: 850px) {
+          :host {
+            min-height: 700px;
+            overflow-y: auto;
+          }
+
           .app {
-            width: min(100% - 24px, 680px);
-            padding-top: 32px;
+            width: min(100% - 22px, 680px);
+            height: auto;
+            min-height: 100%;
+            padding: 16px 0;
           }
 
           .grid {
             grid-template-columns: 1fr;
           }
 
-          h1 {
-            font-size: clamp(3rem, 18vw, 5rem);
+          aside {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+          }
+
+          aside .card {
+            min-height: auto;
+          }
+
+          main.card {
+            min-height: 430px;
           }
 
           #messages {
-            height: 460px;
+            min-height: 330px;
           }
         }
 
-        @media (max-width: 520px) {
+        @media (max-width: 620px) {
+          aside {
+            display: flex;
+          }
+
+          .app {
+            width: calc(100% - 18px);
+          }
+
+          h1 {
+            font-size: 3.25rem;
+          }
+
           .card {
-            padding: 18px;
-            border-radius: 18px;
+            padding: 14px;
           }
 
-          form.composer {
-            flex-direction: column;
-          }
-
-          .composer button {
-            width: 100%;
+          main.card {
+            min-height: 430px;
           }
 
           .message {
