@@ -2,9 +2,9 @@
 name = "moq-secure-chat-cli"
 version = "0.1.0"
 edition = "2021"
-description = "Command-line client for secure MoQ chat"
+description = "Secure command-line chat client using Media over Quic (MoQ)"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/YOUR_USERNAME/YOUR_REPOSITORY"
+repository = "https://github.com/cathode-ray-tube/moq-secure"
 readme = "README.md"
 keywords = ["moq", "chat", "cli", "networking"]
 categories = ["command-line-utilities", "network-programming"]
