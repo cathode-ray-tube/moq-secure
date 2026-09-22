@@ -20,25 +20,18 @@ wget https://raw.githubusercontent.com/moq-dev/moq/refs/heads/main/demo/relay/lo
 moq-relay localhost.toml
 ```
 
-In a **2nd terminal**, clone this repo:
+In a **2nd terminal**, install the binary:
 
 ```bash
-git clone https://github.com/cathode-ray-tube/moq-secure.git
-```
-
-Build:
-
-```bash
-cd moq-secure
-cargo build -p moq-secure-chat-cli
+cargo install moq-secure-chat-cli
 ```
 
 Run:
 
 ```bash
-cd target/debug
-./moq-secure-chat-cli --relay https://localhost:4443/chat --tls-disable-verify publish
+moq-secure-chat-cli --relay https://localhost:4443/chat --tls-disable-verify publish
 ```
+
 In a **3rd terminal**, paste the displayed command to run the binary in subscriber mode and receive sent messages.
 
 ### Troubleshooting
@@ -46,5 +39,5 @@ In a **3rd terminal**, paste the displayed command to run the binary in subscrib
 Run binary with `-h` or `--help` flag to list available args and usage:
 
 ```bash
-./moq-secure-chat-cli --help
+moq-secure-chat-cli --help
 ```
