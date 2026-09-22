@@ -2,20 +2,25 @@
 name = "moq-secure-chat"
 version = "0.1.0"
 edition = "2021"
+description = "Secure chat functionality built on MoQ"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/YOUR_USERNAME/YOUR_REPOSITORY"
+readme = "README.md"
+keywords = ["moq", "chat", "quic", "security"]
+categories = ["network-programming"]
 
 [dependencies]
 anyhow = "1"
+base64 = "0.22"
 bytes = "1"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+hex = "0.4"
+moq-net = "0.2.6"
+moq-native = "0.19.5"
+moq-secure = "0.1.1"
+rand = "0.8"
+thiserror = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1"
-hex = "0.4"
-base64 = "0.22"
-rand = "0.8"
-ed25519-dalek = { version = "2", features = ["rand_core"] }
-
-moq-net = "0.2.6"
-moq-native = { version = "0.19.5" }
-
-moq-secure = { path = "../../moq-secure" }
-thiserror = "1"
 url = "2"
+
