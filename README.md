@@ -74,7 +74,9 @@ moq-secure-chat-cli --help
 
 This is a demo app, with usability prioritized. For production, hardening would be required, particularly around key management and distribution.
 
-## Quick Start (moq-player) *Ubuntu or Debian*
+## Quick Start (moq-player):
+
+*Ubuntu or Debian only*
 
 This is a linux-native player app using GStreamer and GTK4. MOQ-Secure is not yet integrated. Open a terminal and paste the following commands.
 
