@@ -69,6 +69,11 @@ Run binary with `-h` or `--help` flag to list available args and usage:
 ```bash
 moq-secure-chat-cli --help
 ```
+
+### Production
+
+This is a demo app, with usability prioritized. For production, hardening would be required, particularly around key management and distribution.
+
 ## Specification
 
 The complete field layout, byte concatenation rules, nonce/AAD/digest definitions, and receiver processing order are in [specification](https://github.com/cathode-ray-tube/moq-secure/blob/main/specification/README.md).
