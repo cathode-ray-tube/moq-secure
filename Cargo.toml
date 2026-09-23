@@ -5,5 +5,5 @@ members = [
     "rs/moq-secure",
     "rs/examples/moq-secure-chat",
     "rs/examples/moq-secure-chat-cli",
-    "rs/examples/linux-native-video",
+    "rs/examples/moq-player",
 ]

@@ -1989,6 +1989,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "moq-secure"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c2cb429f65d938bef356729a3cd1a695189bb9468afa9f41e9cd4a85b64baca"
+dependencies = [
+ "base64",
+ "bytes",
+ "chacha20poly1305",
+ "clap",
+ "ed25519-dalek",
+ "hex",
+ "rand 0.8.7",
+ "rand_core 0.6.4",
+ "sha2",
+ "thiserror 1.0.69",
+ "zeroize",
+]
+
+[[package]]
 name = "moq-secure-chat"
 version = "0.1.0"
 dependencies = [
@@ -1999,7 +2018,28 @@ dependencies = [
  "hex",
  "moq-native",
  "moq-net",
- "moq-secure",
+ "moq-secure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.8.7",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "moq-secure-chat"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49d46d7f797c2a16c13583cc3499663a5910d9b4f9918506fe3242f7e316bb0e"
+dependencies = [
+ "anyhow",
+ "base64",
+ "bytes",
+ "ed25519-dalek",
+ "hex",
+ "moq-native",
+ "moq-net",
+ "moq-secure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.8.7",
  "thiserror 1.0.69",
  "tokio",
@@ -2009,7 +2049,7 @@ dependencies = [
 
 [[package]]
 name = "moq-secure-chat-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64",
@@ -2019,8 +2059,9 @@ dependencies = [
  "hex",
  "moq-native",
  "moq-net",
- "moq-secure-chat",
+ "moq-secure-chat 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.8.7",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
  "tracing-subscriber",
