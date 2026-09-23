@@ -177,13 +177,13 @@ encrypted
 ### 10. Nonce derivation (byte‑for‑byte identical)  
 
 ```
-nonce = SHA‑256("nonce" || key_id || ctr.to_be_bytes())[0..12]
+nonce = prefix "non" || key_id || ctr.to_be_bytes()
 ```  
 
-- The string is the ASCII bytes `6e 6f 6e 63 65`.  
+- The prefix string is the ASCII bytes `6e 6f 6e`.  
 - Counter must be eight big‑endian bytes.  
 
-*Common pitfalls:* UTF‑16 encoding of “nonce”, little‑endian counters, hashing a decimal string, using the full SHA‑256 output, treating `keyId` as multi‑byte.  
+*Common pitfalls:* UTF‑16 encoding of “non”, little‑endian counters, treating `keyId` as multi‑byte.  
 
 ---  
 
