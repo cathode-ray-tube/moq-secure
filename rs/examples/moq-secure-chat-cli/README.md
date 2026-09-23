@@ -41,3 +41,7 @@ Run binary with `-h` or `--help` flag to list available args and usage:
 ```bash
 moq-secure-chat-cli --help
 ```
+
+### Production
+
+This is a demonstration app, with usability prioritized. For production, hardening would be required, particularly around key management and distribution.
