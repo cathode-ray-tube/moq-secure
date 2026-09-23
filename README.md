@@ -70,9 +70,13 @@ Run binary with `-h` or `--help` flag to list available args and usage:
 moq-secure-chat-cli --help
 ```
 
+### Production
+
+This is a demo app, with usability prioritized. For production, hardening would be required, particularly around key management and distribution.
+
 ## Quick Start (moq-player) *Ubuntu or Debian*
 
-Open a terminal and paste the following commands.
+This is a linux-native player app using GStreamer and GTK4. MOQ-Secure is not yet integrated. Open a terminal and paste the following commands.
 
 ### 1. Install system dependencies
 
@@ -143,10 +147,6 @@ moq-player
 ```
 
 A window should open, playing `Big Buck Bunny`.
-
-### Production
-
-This is a demo app, with usability prioritized. For production, hardening would be required, particularly around key management and distribution.
 
 ## Specification
 
