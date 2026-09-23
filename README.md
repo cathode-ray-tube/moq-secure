@@ -76,9 +76,11 @@ This is a demo app, with usability prioritized. For production, hardening would 
 
 ## Quick Start (moq-player):
 
+![moq-player-screenshot](https://raw.githubusercontent.com/cathode-ray-tube/moq-secure/main/assets/moq-player.jpg)
+
 *Ubuntu or Debian only*
 
-This is a linux-native player app using GStreamer and GTK4. MOQ-Secure is not yet integrated. Open a terminal and paste the following commands.
+This is a linux-native player app using GStreamer and GTK4. MOQ-Secure is not yet integrated. Open a terminal and paste the following commands:
 
 ### 1. Install system dependencies
 
