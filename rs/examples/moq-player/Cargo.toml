@@ -3,7 +3,7 @@ name = "moq-player"
 version = "0.1.0"
 edition = "2021"
 
-description = "A media player for Media over QUIC streams using GStreamer and GTK4"
+description = "A media player for Media over QUIC streams using GTK4 and GStreamer"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/cathode-ray-tube/moq-secure"
