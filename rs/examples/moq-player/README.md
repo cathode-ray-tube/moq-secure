@@ -1,5 +1,7 @@
 # moq-player
 
+![moq-player-screenshot](https://raw.githubusercontent.com/cathode-ray-tube/moq-secure/main/assets/moq-player.jpg)
+
 Linux-native, low-latency video rendering experiment.
 
 This forms the basis of a MoQ media player (including encryption/signing) for linux.  I will include this in my [moq-tv](https://github.com/cathode-ray-tube/moq-tv) repo (mainly targeting Smart TVs at the moment).
