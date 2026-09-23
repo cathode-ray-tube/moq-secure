@@ -1,6 +1,6 @@
 [package]
 name = "moq-player"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 description = "A media player for Media over QUIC streams using GTK4 and GStreamer"
