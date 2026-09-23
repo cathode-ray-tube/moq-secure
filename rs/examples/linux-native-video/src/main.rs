@@ -520,7 +520,7 @@ fn main() {
     }
 
     let app = gtk::Application::builder()
-        .application_id("com.example.moq-gstreamer-player")
+        .application_id("com.cathode-ray-tube.moq-player")
         .build();
 
     app.connect_activate(|app| {
