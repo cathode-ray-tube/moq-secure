@@ -1,4 +1,4 @@
-# linux-native-video
+# moq-player
 
 Linux-native, low-latency video rendering experiment.
 
