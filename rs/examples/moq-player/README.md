@@ -2,14 +2,14 @@
 
 Linux-native, low-latency video rendering experiment.
 
-When usable/performant, it will form the basis of a MoQ media player (including encryption/signing) for linux.  I will include this in my [moq-tv](https://github.com/cathode-ray-tube/moq-tv) repo (mainly targeting Smart TVs at the moment).
+This forms the basis of a MoQ media player (including encryption/signing) for linux.  I will include this in my [moq-tv](https://github.com/cathode-ray-tube/moq-tv) repo (mainly targeting Smart TVs at the moment).
 
 ## What this is
 - A Rust project targeting Linux that uses **GTK4** and **GStreamer**.
 - Current pipeline is a real video decoder/player, connecting to a MoQ Relay and playing audio/video.
 
 ## Security / streaming direction
-- Transport: **Media Over Quic (MoQ)**
+- Transport: **Media over Quic (MoQ)**
 - Planned payload protection: **moq-secure** (encrypt + sign media payloads)
 - Intended architecture: streaming layer (MoQ) → verified/decrypted media chunks → decoder → renderer.
 
