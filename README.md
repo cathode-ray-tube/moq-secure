@@ -28,6 +28,10 @@ Publishers are able to use **any** public MOQ CDN, with the hosting provider una
 
 ## Quick Start (moq-secure-chat-cli):
 
+[![crates.io version](https://img.shields.io/crates/v/moq-secure-chat-cli.svg)](https://crates.io/crates/moq-secure-chat-cli)
+[![Downloads](https://img.shields.io/crates/d/moq-secure-chat-cli.svg)](https://crates.io/crates/moq-secure-chat-cli)
+[![docs.rs](https://img.shields.io/docsrs/moq-secure-chat-cli)](https://docs.rs/moq-secure-chat-cli)
+
 This demonstrates moq-secure end-to-end encryption and signing of text chat messages in the terminal.
 
 ### Prerequisites
@@ -80,7 +84,6 @@ This is a demo app, with usability prioritized. For production, hardening would 
 
 [![crates.io version](https://img.shields.io/crates/v/moq-player.svg)](https://crates.io/crates/moq-player)
 [![Downloads](https://img.shields.io/crates/d/moq-player.svg)](https://crates.io/crates/moq-player)
-[![docs.rs](https://img.shields.io/docsrs/moq-player)](https://docs.rs/moq-player)
 
 *Ubuntu or Debian only*
 
