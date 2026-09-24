@@ -2,7 +2,7 @@
 
 ![moq-player-screenshot](https://raw.githubusercontent.com/cathode-ray-tube/moq-secure/main/assets/moq-player.jpg)
 
-A native desktop player for MoQ streams using Rust, GTK4, and GStreamer.
+A native desktop player for MoQ streams using Rust, GTK4 and GStreamer.
 
 MOQ-Secure is not yet integrated.
 
