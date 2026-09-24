@@ -10,7 +10,7 @@
 
 # MOQ-Secure Encryption & Signing
 
-A fixed format for end-to-end encrypting and signing **media payloads** carried by **Media Over QUIC (MOQ)**.
+A fixed format for end-to-end secure **media payloads** carried by **Media Over QUIC (MOQ)**.
 
 Encryption algorithms:
 - **ChaCha20-Poly1305**
