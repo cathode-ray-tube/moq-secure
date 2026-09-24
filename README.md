@@ -257,31 +257,9 @@ If necessary, set:
 ```bash
 export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH"
 ```
-
-### Install Rust
-
-Install Rust if it is not already installed:
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-Load Rust into the current terminal:
-
-```bash
-source "$HOME/.cargo/env"
-```
-
-Verify the installation:
-
-```bash
-rustc --version
-cargo --version
-```
-
 ### Verify the GStreamer installation
 
-Run these commands on every supported platform:
+Same commands on every supported platform:
 
 ```bash
 gst-inspect-1.0 moq
@@ -303,7 +281,28 @@ The second command should display information about:
 gtk4paintablesink
 ```
 
-If either command fails, `moq-player` will not run correctly.
+If either command fails, `moq-player` will not run correctly. See `Troubleshooting` below.
+
+### Install Rust
+
+Install Rust if it is not already installed:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Load Rust into the current terminal:
+
+```bash
+source "$HOME/.cargo/env"
+```
+
+Verify the installation:
+
+```bash
+rustc --version
+cargo --version
+```
 
 ### Install moq-player
 
