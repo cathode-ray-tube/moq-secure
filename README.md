@@ -91,7 +91,7 @@ This is a demo app, with usability prioritized. For production, hardening would 
 [![crates.io version](https://img.shields.io/crates/v/moq-player.svg)](https://crates.io/crates/moq-player)
 [![Downloads](https://img.shields.io/crates/d/moq-player.svg)](https://crates.io/crates/moq-player)
 
-A native desktop player for MoQ streams using Rust, GTK4, and GStreamer.
+A native desktop player for MoQ streams using Rust, GTK4 and GStreamer.
 
 MOQ-Secure is not yet integrated.
 
