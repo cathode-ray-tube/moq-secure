@@ -27,6 +27,6 @@ MOQ-Secure is designed to provide:
 
 Publishers are able to use **any** public MOQ CDN, with the hosting provider unable to see the content. Consumers can verify the publisher of the content, wherever they receive it from.
 
-**A moq-secure frame is nested entirely within the payload of a moq frame:**
+## A moq-secure frame is nested entirely within the payload of a moq frame.
 
 ![moq-secure frame layout](https://raw.githubusercontent.com/cathode-ray-tube/moq-secure/main/assets/moq-secure-layout.jpeg)
