@@ -14,7 +14,7 @@ A fixed format for end-to-end secure **media payloads** carried by **Media Over 
 
 Encryption algorithms:
 - **ChaCha20-Poly1305**
-- AES-GCM 128 (*Coming Soon*)
+- AES-256-GCM (*Coming Soon*)
 
 Signature algorithm:
 - **Ed25519**
