@@ -76,7 +76,9 @@ moq-secure-chat-cli --relay https://localhost:4443/chat --tls-disable-verify pub
 moq-secure-chat-cli --relay https://example.com:4443/chat publish
 ```
 
-In a **3rd terminal**, paste the displayed command to run the binary in subscriber mode and receive sent messages.
+The app will print a copy and paste command to use in a **3rd terminal**, to run the binary in `subscriber` mode.
+
+Messages sent from the **publisher** terminal should be visible in the **subscriber** terminal.
 
 ### Troubleshooting
 
