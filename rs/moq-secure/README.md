@@ -1,6 +1,6 @@
 # MOQ-Secure Encryption & Signing
 
-![moq-secure frame layout](https://raw.githubusercontent.com/cathode-ray-tube/moq-secure/blob/main/assets/moq-secure-layout.jpeg)
+![moq-secure frame layout](https://raw.githubusercontent.com/cathode-ray-tube/moq-secure/main/assets/moq-secure-layout.jpeg)
 
 [![crates.io version](https://img.shields.io/crates/v/moq-secure.svg)](https://crates.io/crates/moq-secure)
 [![Downloads](https://img.shields.io/crates/d/moq-secure.svg)](https://crates.io/crates/moq-secure)
