@@ -2,7 +2,7 @@
 ### The above diagram shows the frame layout, which is nested entirely within the payload of a MOQ frame.
 
 
-# ChaCha20-Poly1305 + Optional Ed25519 Signing
+# Encryption (ChaCha20-Poly1305 or AES-256-GCM) and Ed25519 Signing
 
 This document defines a wire format for encrypted media payloads transmitted via Media Over QUIC (MOQ).
 
