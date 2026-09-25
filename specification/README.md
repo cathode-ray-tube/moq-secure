@@ -488,29 +488,29 @@ Both sender and receiver MUST agree on:
   pad_len(4) || zero_padding(pad_len) || plaintext
   ```
 
-    - Nonce derivation:
+- Nonce derivation:
     
-      ```text
-     "non" || key_id || ctr
-      ```
+  ```text
+  "non" || key_id || ctr
+  ```
     
-    - AEAD AAD:
+- AEAD AAD:
     
-      ```text
-      header
-      ```
+  ```text
+  header
+  ```
     
-    - Encrypted-frame layout:
+- Encrypted-frame layout:
     
-      ```text
-      header || ciphertext || aead_tag || optional_signature
-      ```
+  ```text
+  header || ciphertext || aead_tag || optional_signature
+  ```
     
-    - Unencrypted-frame layout:
+- Unencrypted-frame layout:
     
-      ```text
-      header || pad_len || zero_padding || plaintext || optional_signature
-      ```
+  ```text
+  header || pad_len || zero_padding || plaintext || optional_signature
+  ```
 
 - Signature input:
   - encrypted: `header || ciphertext || aead_tag`;
