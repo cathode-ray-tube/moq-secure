@@ -64,10 +64,16 @@ In a **2nd terminal**, install the binary:
 cargo install moq-secure-chat-cli
 ```
 
-Run:
+Run (with your localhost relay):
 
 ```bash
 moq-secure-chat-cli --relay https://localhost:4443/chat --tls-disable-verify publish
+```
+
+**or** run (with a remote relay, replacing `https://example.com:4443/chat` with the **url**, **port** and **path** of the relay):
+
+```bash
+moq-secure-chat-cli --relay https://example.com:4443/chat
 ```
 
 In a **3rd terminal**, paste the displayed command to run the binary in subscriber mode and receive sent messages.
