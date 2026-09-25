@@ -32,10 +32,10 @@ Run (with your localhost relay):
 moq-secure-chat-cli --relay https://localhost:4443/chat --tls-disable-verify publish
 ```
 
-**or** run (with a remote relay, replacing `https://example.com:4443/chat` with the url, port and path of the relay):
+**or** run (with a remote relay, replacing `https://example.com:4443/chat` with the **url**, **port** and **path** of the relay):
 
 ```bash
-moq-secure-chat-cli --relay https://example.com:4443/chat
+moq-secure-chat-cli --relay https://example.com:4443/chat publish
 ```
 
 In a **3rd terminal**, paste the displayed command to run the binary in subscriber mode and receive sent messages.
