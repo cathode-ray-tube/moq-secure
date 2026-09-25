@@ -1,4 +1,4 @@
-![moq-secure frame layout](https://github.com/cathode-ray-tube/moq-secure/blob/main/assets/moq-secure-frame-layout-new.jpeg)
+![moq-secure frame layout](https://github.com/cathode-ray-tube/moq-secure/blob/main/assets/moq-secure-layout.jpeg)
 ### The above diagram shows the frame layout, which is nested entirely within the payload of a MOQ frame.
 
 
