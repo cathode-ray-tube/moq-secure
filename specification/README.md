@@ -491,7 +491,7 @@ Both sender and receiver MUST agree on:
 - Nonce derivation:
 
   ```text
- "non" || key_id || ctr
+ nonce-prefix || key_id || ctr
   ```
 
 - AEAD AAD:
