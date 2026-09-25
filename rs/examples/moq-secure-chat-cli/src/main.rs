@@ -174,9 +174,7 @@ async fn main() -> Result<()> {
                 .create_track(CHAT_TRACK.to_owned(), None)
                 .context("failed to create chat track")?;
 
-            let pwd_bin: PathBuf =
-                env::current_dir()?.join("moq-secure-chat-cli");
-            let bin = shell_escape(&pwd_bin.to_string_lossy());
+            let bin = shell_escape("moq-secure-chat-cli");
 
             let tls_flag = if cli.tls_disable_verify {
                 " --tls-disable-verify"
