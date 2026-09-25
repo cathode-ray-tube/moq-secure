@@ -10,7 +10,7 @@ This document defines a wire format for encrypted media payloads transmitted via
 
 - Encrypt only the media payload; the transport treats the bytes as opaque.
 - Nest the entire MOQ-Secure frame inside the MOQ frame payload.
-- Use ChaCha20-Poly1305 for confidentiality and AEAD integrity.
+- Support ChaCha20-Poly1305 and AES-256-GCM, ensuring performance across devices.
 - Optionally provide authenticity through Ed25519 signatures on selected frames.
 - Support signing-only frames without an AEAD tag.
 - Support lossy delivery and late joining through a frame counter and signed-frame lease system.
@@ -46,7 +46,7 @@ The header is always 17 bytes and is parsed before processing the payload.
 | `ctr` | `uint64` | 8 bytes | Frame counter; randomly initialized, then incremented |
 | `n_signed` | `uint8` | 1 byte | Signing and lease parameter |
 | `sig_flag` | `uint8` | 1 byte | `0` = no signature; `1` = 64-byte signature follows the payload |
-| `encrypted` | `uint8` | 1 byte | `1` = ChaCha20-Poly1305; `0` = signing-only/plaintext |
+| `encryption_type` | `uint8` | 1 byte |  `0` = unencrypted; `1` = ChaCha20-Poly1305; `2` = AES-256-GCM; |
 
 The header does **not** contain `pad_len`. The `pad_len` field is the first four bytes of the payload and is encrypted when `encrypted == 1`.
 
@@ -305,7 +305,7 @@ The receiver must know the enclosing MOQ payload boundary so it can determine th
 
 If `sig_flag == 1`, reserve the final 64 bytes for the signature trailer.
 
-If `encrypted == 1`, reserve the 16 bytes immediately before the optional signature for the AEAD tag.
+If `encryption_type != 0` , reserve the 16 bytes immediately before the optional signature for the AEAD tag.
 
 The remaining bytes are the payload or ciphertext.
 
@@ -408,14 +408,14 @@ Deliver `usable_plaintext` to the playback or decoding pipeline.
 The fixed header is:
 
 ```text
-magic       4 bytes
-version     1 byte
-key_id      1 byte
-ctr         8 bytes
-n_signed    1 byte
-sig_flag    1 byte
-encrypted   1 byte
-                         = 17 bytes
+magic             4 bytes
+version           1 byte
+key_id            1 byte
+ctr               8 bytes
+n_signed          1 byte
+sig_flag          1 byte
+encryption_type   1 byte
+                  = 17 bytes
 ```
 
 Let:
@@ -428,21 +428,23 @@ Let:
 
 Total frame sizes are:
 
-| `encrypted` | `sig_flag` | Total size |
+| `encryption_type` | `sig_flag` | Total size |
 |---:|---:|---:|
-| `1` | `1` | `17 + N + 16 + 64 = 97 + N` |
-| `1` | `0` | `17 + N + 16 = 33 + N` |
-| `0` | `1` | `17 + N + 64 = 81 + N` |
-| `0` | `0` | `17 + N` |
+| `2` — AES-256-GCM | `1` | `17 + N + 16 + 64 = 97 + N` |
+| `2` — AES-256-GCM | `0` | `17 + N + 16 = 33 + N` |
+| `1` — ChaCha20-Poly1305 | `1` | `17 + N + 16 + 64 = 97 + N` |
+| `1` — ChaCha20-Poly1305 | `0` | `17 + N + 16 = 33 + N` |
+| `0` — unencrypted | `1` | `17 + N + 64 = 81 + N` |
+| `0` — unencrypted | `0` | `17 + N` |
 
-Substituting `N = 4 + pad_len + P`:
-
-| `encrypted` | `sig_flag` | Total size |
+| `encryption_type` | `sig_flag` | Total size |
 |---:|---:|---:|
-| `1` | `1` | `101 + pad_len + P` |
-| `1` | `0` | `37 + pad_len + P` |
-| `0` | `1` | `85 + pad_len + P` |
-| `0` | `0` | `21 + pad_len + P` |
+| `2` — AES-256-GCM | `1` | `101 + pad_len + P` |
+| `2` — AES-256-GCM | `0` | `37 + pad_len + P` |
+| `1` — ChaCha20-Poly1305 | `1` | `101 + pad_len + P` |
+| `1` — ChaCha20-Poly1305 | `0` | `37 + pad_len + P` |
+| `0` — unencrypted | `1` | `85 + pad_len + P` |
+| `0` — unencrypted | `0` | `21 + pad_len + P` |
 
 ---
 
@@ -452,7 +454,7 @@ A receiver SHOULD drop a frame if any of the following conditions apply:
 
 - `magic` is incorrect.
 - `version` is unsupported.
-- `encrypted` is not `0` or `1`.
+- `encrypted` is not `0`, `1` or `2`.
 - `sig_flag` is not `0` or `1`.
 - `n_signed == 0` but `sig_flag == 1`.
 - The frame is too short for its declared tag or signature.
@@ -478,7 +480,7 @@ Both sender and receiver MUST agree on:
   ctr(8) ||
   n_signed(1) ||
   sig_flag(1) ||
-  encrypted(1)
+  encryption_type(1)
   ```
 
 - Big-endian encoding for `ctr` and `pad_len`.
