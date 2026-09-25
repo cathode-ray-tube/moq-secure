@@ -11,10 +11,12 @@ This document defines a wire format for encrypted media payloads transmitted via
 - Encrypt only the media payload; the transport treats the bytes as opaque.
 - Nest the entire MOQ-Secure frame inside the MOQ frame payload.
 - Support ChaCha20-Poly1305 and AES-256-GCM, ensuring performance across devices.
-- Optionally provide authenticity through Ed25519 signatures on selected frames.
-- Support signing-only frames without an AEAD tag.
+- Provide authenticity through Ed25519 signatures on selected frames.
+- Indicate signing frequency through `n_signed` value.
+- Make encryption and signing each optional.
+- Allow encryption to be disabled with `encryption_type == 0`.
+- Allow signing to be disabled with `n_signed == 0`.
 - Support lossy delivery and late joining through a frame counter and signed-frame lease system.
-- Allow signing to be disabled entirely with `n_signed == 0`.
 - Keep all variable-length payload data inside the encrypted portion of encrypted frames.
 
 > Handshake and out-of-band key exchange are performed separately, such as through a WebSocket/HTTP server or by sharing keys in person using a QR code.
