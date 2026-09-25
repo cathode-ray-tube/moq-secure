@@ -4,7 +4,7 @@ key_id(1)
 ctr(8)
 n_signed(1)
 sig_flag(1)
-encrypted(1)
+encryption_type(1)
 payload:
  - pad_len(4-byte big-endian)
  - zero padding(pad_len)
