@@ -226,7 +226,7 @@ If Homebrew does not provide `gst-plugins-rs`, install the official GStreamer ru
 
 Use one GStreamer installation consistently. Do not mix Homebrew GStreamer libraries with the official GStreamer framework unless you configure the library paths carefully.
 
-Download the macOS Apple Silicon `moq-gst` tarball from the project's GitHub Releases page.
+Download the macOS Apple Silicon `moq-gst` tarball from the moq project's GitHub [releases](https://github.com/moq-dev/moq/releases) page.
 
 Extract and install the MoQ plugin:
 
