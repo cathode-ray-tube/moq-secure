@@ -34,6 +34,7 @@
       "payload": "f9a8bdf5",
       "tag": "96068b0ca7ee651533fdf147f2bf7b04",
       "signature": null,
+      "initialLease": 0,
       "lease": 0
     },
     {
@@ -45,6 +46,7 @@
       "payload": "997a7eee0e32e78064b157da46cb",
       "tag": "c5db2aeaf292a6997eb9085f6399f84d",
       "signature": null,
+      "initialLease": 0,
       "lease": 0
     },
     {
@@ -56,7 +58,8 @@
       "payload": "53d9d00c195ce9306a0ff1f2bbee340fefe7d04322fcc61c11942eb7b449e0",
       "tag": "3925b71e8371ce4022acfaa392df65e0",
       "signature": "5f7000add2bd563d85d2b494a6d64f9153085a5f809339cc85d11ef26539d2a56759ce00726913d0a88c8172f5d616933d84ff9f2b7c013653e29601e2562900",
-      "lease": 3
+      "initialLease": 0,
+      "lease": 2
     },
     {
       "name": "cleartext_unsigned",
@@ -67,7 +70,8 @@
       "payload": "000000020000636c65617274657874",
       "tag": "00000000000000000000000000000000",
       "signature": null,
-      "lease": 0
+      "initialLease": 2,
+      "lease": 2
     },
     {
       "name": "cleartext_signed",
@@ -78,7 +82,20 @@
       "payload": "0000000100deadbeef",
       "tag": "00000000000000000000000000000000",
       "signature": "1bfd2e00c69f5c6e41c38a7149a907b88d027c63c9a9f1858d25a070f71f4cd72d0aeac913551d11bc202e14c3d999e9246c80be7f59500fea69bb93eb88d109",
-      "lease": 2
+      "initialLease": 2,
+      "lease": 1
+    },
+    {
+      "name": "encrypted_signed_once",
+      "plaintext": "7369676e6564206f6e6365",
+      "padLen": 0,
+      "frame": "4d4f5153010700000000000000050101015260b378e986da7676d002c958f727893d91cfd7c403445b3418564e97ae2902ee1da6832bfd68cb431b3fc3af0eb8282013d4c84660ce27a85cb82d78be718d0a77b3b6380d3821c434379adba70209b93ccc83cb03c9686221d0f3f8630a",
+      "header": "4d4f515301070000000000000005010101",
+      "payload": "5260b378e986da7676d002c958f727",
+      "tag": "893d91cfd7c403445b3418564e97ae29",
+      "signature": "02ee1da6832bfd68cb431b3fc3af0eb8282013d4c84660ce27a85cb82d78be718d0a77b3b6380d3821c434379adba70209b93ccc83cb03c9686221d0f3f8630a",
+      "initialLease": 1,
+      "lease": 0
     }
   ]
 }
