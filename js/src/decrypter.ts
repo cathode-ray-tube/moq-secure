@@ -22,12 +22,21 @@ export interface MoqSecureDecrypterProps {
 
 /**
  * Decrypts and verifies each moq-secure frame.
+ *
+ * Decryption is serialized so that lease updates cannot race when multiple
+ * frames are submitted concurrently.
  */
 export class MoqSecureDecrypter implements FrameDecrypter {
 	readonly keyStore: KeyStore;
 	readonly broadcasterPublicKey: Uint8Array;
 
 	#leaseRemaining = 0;
+
+	/*
+	 * Each decrypt() call waits for the previous call to finish before
+	 * reading or updating #leaseRemaining.
+	 */
+	#decryptTail: Promise<void> = Promise.resolve();
 
 	constructor(props: MoqSecureDecrypterProps) {
 		this.keyStore = props.keyStore;
@@ -74,18 +83,57 @@ export class MoqSecureDecrypter implements FrameDecrypter {
 		_sequenceNumber: bigint | number,
 		ciphertext: Uint8Array,
 	): Promise<Uint8Array> {
-		const lease = {
-			remaining: this.#leaseRemaining,
-		};
+		let releaseTurn!: () => void;
 
-		const plaintext = await decryptFrame(
-			this.keyStore,
-			this.broadcasterPublicKey,
-			lease,
-			ciphertext,
-		);
+		const currentTurn = new Promise<void>((resolve) => {
+			releaseTurn = resolve;
+		});
 
-		this.#leaseRemaining = lease.remaining;
-		return plaintext;
+		/*
+		 * Keep the queue alive even if the previous decrypt failed.
+		 * A failed frame must not prevent later frames from being processed.
+		 */
+		const previousTurn = this.#decryptTail;
+
+		this.#decryptTail = previousTurn
+			.catch(() => undefined)
+			.then(() => currentTurn);
+
+		await previousTurn.catch(() => undefined);
+
+		try {
+			/*
+			 * Use a local lease object. decryptFrame() updates this object
+			 * only after the frame has been fully authenticated, decrypted,
+			 * and padding-validated.
+			 */
+			const lease = {
+				remaining: this.#leaseRemaining,
+			};
+
+			const plaintext = await decryptFrame(
+				this.keyStore,
+				this.broadcasterPublicKey,
+				lease,
+				ciphertext,
+			);
+
+			/*
+			 * Commit the lease only after decryptFrame() succeeds.
+			 *
+			 * If signature verification, AEAD authentication, or padding
+			 * validation fails, decryptFrame() throws and this assignment is
+			 * skipped. The previous lease is therefore preserved.
+			 */
+			this.#leaseRemaining = lease.remaining;
+
+			return plaintext;
+		} finally {
+			/*
+			 * Allow the next queued decrypt() call to run regardless of
+			 * whether this call succeeded or failed.
+			 */
+			releaseTurn();
+		}
 	}
 }
