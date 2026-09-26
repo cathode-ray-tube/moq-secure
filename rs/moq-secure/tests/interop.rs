@@ -65,6 +65,13 @@ fn rust_consumes_js_frames() {
             "plaintext mismatch for {}",
             vector.name,
         );
+
+        assert_eq!(
+            lease_remaining,
+            vector.lease,
+            "lease mismatch after {}",
+            vector.name,
+        );
     }
 }
 
@@ -110,3 +117,4 @@ fn rust_produces_the_same_frames_as_js() {
         );
     }
 }
+
