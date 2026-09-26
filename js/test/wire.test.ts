@@ -21,6 +21,7 @@ type FrameVector = {
   payload: string;
   tag: string;
   signature: string | null;
+  initialLease: number;
   lease: number;
 };
 
@@ -273,7 +274,9 @@ describe("generated frame vectors", () => {
       const fields = headerFields(expected.header);
       const signed = fields.sigFlag === 1;
 
-      const lease = { remaining: 0 };
+      const lease = {
+        remaining: expected.initialLease,
+      };
 
       const publicKeyValue = signed
         ? await publicKey()
@@ -310,7 +313,9 @@ describe("generated frame vectors", () => {
     const decrypted = await decryptFrame(
       storeWithKey(),
       new Uint8Array(),
-      { remaining: 0 },
+      {
+        remaining: expected.initialLease,
+      },
       hex(expected.frame),
     );
 
@@ -331,7 +336,9 @@ describe("generated frame vectors", () => {
     const decrypted = await decryptFrame(
       storeWithKey(),
       new Uint8Array(),
-      { remaining: 0 },
+      {
+        remaining: expected.initialLease,
+      },
       hex(expected.frame),
     );
 
@@ -502,7 +509,9 @@ describe("Frame errors", () => {
       decryptFrame(
         storeWithKey(),
         new Uint8Array(),
-        { remaining: 0 },
+        {
+          remaining: expected.initialLease,
+        },
         encoded,
       ),
     ).rejects.toThrow();
@@ -517,7 +526,9 @@ describe("Frame errors", () => {
       decryptFrame(
         new InMemoryKeyStore(),
         new Uint8Array(),
-        { remaining: 0 },
+        {
+          remaining: expected.initialLease,
+        },
         hex(expected.frame),
       ),
     ).rejects.toThrowError(
@@ -533,10 +544,6 @@ describe("Frame errors", () => {
     );
 
     const encoded = hex(expected.frame);
-
-    encoded.set(
-      encoded.slice(0, encoded.length - 16),
-    );
 
     expect(() => Frame.parse(
       encoded.slice(0, encoded.length - 16),
