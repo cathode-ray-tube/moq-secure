@@ -47,6 +47,8 @@ function frameRecord(
   plaintext: Uint8Array,
   padLen: number,
 ) {
+  const nSigned = frame.header.nSigned;
+
   return {
     name,
 
@@ -59,10 +61,16 @@ function frameRecord(
     header: hex(frame.header.encode()),
     payload: hex(frame.payload),
     tag: hex(frame.tag),
-    signature: frame.signature ? hex(frame.signature) : null,
+    signature: frame.signature
+      ? hex(frame.signature)
+      : null,
 
-    // Initial lease value expected for this frame.
-    lease: frame.header.nSigned,
+    // A signed frame permits nSigned - 1 consecutive
+    // unsigned frames. Signing disabled means that the
+    // lease mechanism does not apply.
+    lease: nSigned > 0
+      ? Math.max(nSigned - 1, 0)
+      : 0,
   };
 }
 
@@ -152,6 +160,16 @@ const cases: Array<{
     padLen: 1,
     plaintext: bytes(0xde, 0xad, 0xbe, 0xef),
   },
+  {
+    name: "encrypted_signed_once",
+    keyId: 7,
+    ctr: 5n,
+    nSigned: 1,
+    maybeSign: true,
+    encrypted: 1,
+    padLen: 0,
+    plaintext: utf8("signed once"),
+  },
 ];
 
 const frames: ReturnType<typeof frameRecord>[] = [];
@@ -196,7 +214,10 @@ const rustOutputDirectory = fileURLToPath(
   new URL("../rs/moq-secure/test-vectors/", import.meta.url),
 );
 
-const rustOutputPath = join(rustOutputDirectory, "frames.json");
+const rustOutputPath = join(
+  rustOutputDirectory,
+  "frames.json",
+);
 
 await writeFile(
   outputPath,
