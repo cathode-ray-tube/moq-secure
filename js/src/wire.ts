@@ -21,7 +21,6 @@ ed25519.hashes.sha512 = (...messages: Uint8Array[]) => {
   return sha512(concatBytes(...messages));
 };
 
-
 function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
   return a.length === b.length &&
     a.every((value, index) => value === b[index]);
@@ -102,6 +101,17 @@ export class WireHeader {
 
     if (this.version !== VERSION) {
       throw MoqSecureError.unsupportedVersion(this.version);
+    }
+
+    if (
+      !Number.isInteger(this.nSigned) ||
+      this.nSigned < 0 ||
+      this.nSigned > 0xff
+    ) {
+      throw new MoqSecureError(
+        "InvalidNSigned",
+        `nSigned must be an unsigned byte, got ${this.nSigned}`,
+      );
     }
 
     if (this.sigFlag !== 0 && this.sigFlag !== 1) {
@@ -257,14 +267,23 @@ export class Frame {
     broadcasterPublicKey: Uint8Array,
     lease: { remaining: number },
   ): Promise<Uint8Array> {
-    if (this.header.nSigned === 0) {
+    const signingEnabled = this.header.nSigned > 0;
+    const signed = this.header.sigFlag === 1;
+
+    /*
+     * Validate the signing state and verify signatures first.
+     *
+     * The lease is intentionally not modified here. It is updated only
+     * after decryption and padding validation succeed.
+     */
+    if (!signingEnabled) {
       if (this.header.sigFlag !== 0 || this.signature) {
         throw new MoqSecureError(
           "SigningMismatch",
           "signing is disabled but a signature is present",
         );
       }
-    } else if (this.header.sigFlag === 1) {
+    } else if (signed) {
       if (!this.signature) {
         throw MoqSecureError.invalidSignature();
       }
@@ -278,14 +297,20 @@ export class Frame {
       if (!valid) {
         throw MoqSecureError.invalidSignature();
       }
-
-      lease.remaining = this.header.nSigned;
     } else {
-      if (lease.remaining === 0) {
+      /*
+       * For unsigned frames, a positive lease is required.
+       *
+       * Check that the value is a valid non-negative integer as well as
+       * checking that it is nonzero. This prevents malformed lease state
+       * such as NaN from bypassing the check.
+       */
+      if (
+        !Number.isSafeInteger(lease.remaining) ||
+        lease.remaining <= 0
+      ) {
         throw MoqSecureError.invalidSignature();
       }
-
-      lease.remaining--;
     }
 
     let paddedPlaintext: Uint8Array;
@@ -321,14 +346,33 @@ export class Frame {
       paddedPlaintext = this.payload;
     }
 
+    let plaintext: Uint8Array;
+
     try {
-      return removePadding(paddedPlaintext);
+      plaintext = removePadding(paddedPlaintext);
     } catch {
       throw new MoqSecureError(
         "InvalidPadLength",
         "invalid padding length",
       );
     }
+
+    /*
+     * Commit the lease update only after the complete frame has been
+     * authenticated, decrypted, and padding-validated.
+     *
+     * A signed frame consumes the current signing position, so only
+     * nSigned - 1 subsequent unsigned frames may be accepted.
+     */
+    if (signingEnabled) {
+      if (signed) {
+        lease.remaining = Math.max(this.header.nSigned - 1, 0);
+      } else {
+        lease.remaining--;
+      }
+    }
+
+    return plaintext;
   }
 }
 
