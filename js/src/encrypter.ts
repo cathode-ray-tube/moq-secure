@@ -21,8 +21,17 @@ export interface MoqSecureEncrypterProps {
 	keyStore: KeyStore;
 	signingPrivateKey: Uint8Array;
 	keyId: number;
+
+	/**
+	 * Sign every nSigned-th frame.
+	 *
+	 * 0: signing disabled
+	 * 1: every frame signed
+	 * 2: every second frame signed
+	 * 3: every third frame signed
+	 */
 	nSigned: number;
-	maybeSign: boolean;
+
 	padLen: number;
 	initialCtr?: bigint;
 }
@@ -35,10 +44,10 @@ export class MoqSecureEncrypter implements FrameEncrypter {
 	readonly signingPrivateKey: Uint8Array;
 	readonly keyId: number;
 	readonly nSigned: number;
-	readonly maybeSign: boolean;
 	readonly padLen: number;
 
 	#ctr: bigint;
+	#frameCount = 0;
 
 	constructor(props: MoqSecureEncrypterProps) {
 		if (
@@ -77,7 +86,6 @@ export class MoqSecureEncrypter implements FrameEncrypter {
 		this.signingPrivateKey = props.signingPrivateKey.slice();
 		this.keyId = props.keyId;
 		this.nSigned = props.nSigned;
-		this.maybeSign = props.maybeSign;
 		this.padLen = props.padLen;
 		this.#ctr = initialCtr;
 	}
@@ -96,11 +104,37 @@ export class MoqSecureEncrypter implements FrameEncrypter {
 		return counter;
 	}
 
+	#shouldSign(): boolean {
+		/*
+		 * nSigned == 0 means signing is disabled. Avoid modulo zero.
+		 */
+		if (this.nSigned === 0) {
+			return false;
+		}
+
+		/*
+		 * #frameCount is zero-based:
+		 *
+		 * nSigned = 1: frames 1, 2, 3, ...
+		 * nSigned = 2: frames 1, 3, 5, ...
+		 * nSigned = 3: frames 1, 4, 7, ...
+		 */
+		return this.#frameCount % this.nSigned === 0;
+	}
+
 	async encrypt(
 		_sequenceNumber: bigint | number,
 		plaintext: Uint8Array,
 	): Promise<Uint8Array> {
 		const ctr = this.#takeCounter();
+		const shouldSign = this.#shouldSign();
+
+		/*
+		 * Allocate the frame position synchronously, before awaiting
+		 * encryption or signing. This keeps the schedule correct even if
+		 * encrypt() is called concurrently.
+		 */
+		this.#frameCount++;
 
 		const frame = await encryptFrame(
 			this.keyStore,
@@ -108,7 +142,7 @@ export class MoqSecureEncrypter implements FrameEncrypter {
 			this.keyId,
 			ctr,
 			this.nSigned,
-			this.maybeSign,
+			shouldSign,
 			1,
 			this.padLen,
 			plaintext,
@@ -117,3 +151,4 @@ export class MoqSecureEncrypter implements FrameEncrypter {
 		return frame.serialize();
 	}
 }
+
