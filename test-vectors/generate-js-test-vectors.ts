@@ -46,17 +46,12 @@ function frameRecord(
   frame: Frame,
   plaintext: Uint8Array,
   padLen: number,
+  lease: number,
 ) {
-  const nSigned = frame.header.nSigned;
-
   return {
     name,
-
-    // Test metadata. These fields are not necessarily present on the wire.
     plaintext: hex(plaintext),
     padLen,
-
-    // Serialized wire components.
     frame: hex(frame.serialize()),
     header: hex(frame.header.encode()),
     payload: hex(frame.payload),
@@ -64,13 +59,7 @@ function frameRecord(
     signature: frame.signature
       ? hex(frame.signature)
       : null,
-
-    // A signed frame permits nSigned - 1 consecutive
-    // unsigned frames. Signing disabled means that the
-    // lease mechanism does not apply.
-    lease: nSigned > 0
-      ? Math.max(nSigned - 1, 0)
-      : 0,
+    lease,
   };
 }
 
@@ -173,6 +162,7 @@ const cases: Array<{
 ];
 
 const frames: ReturnType<typeof frameRecord>[] = [];
+let leaseRemaining = 0;
 
 for (const testCase of cases) {
   const frame = await encryptFrame(
@@ -187,12 +177,27 @@ for (const testCase of cases) {
     testCase.plaintext,
   );
 
+  if (testCase.nSigned > 0) {
+    if (testCase.maybeSign) {
+      leaseRemaining = testCase.nSigned - 1;
+    } else {
+      if (leaseRemaining === 0) {
+        throw new Error(
+          `unsigned frame has no remaining lease: ${testCase.name}`,
+        );
+      }
+
+      leaseRemaining -= 1;
+    }
+  }
+
   frames.push(
     frameRecord(
       testCase.name,
       frame,
       testCase.plaintext,
       testCase.padLen,
+      leaseRemaining,
     ),
   );
 }
