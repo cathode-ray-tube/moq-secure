@@ -335,7 +335,7 @@ When `n_signed > 0`:
 
 - For a successfully verified signed frame:
   - accept the frame;
-  - set `lease_remaining = n_signed`.
+  - set `lease_remaining = n_signed - 1`.
 - For an unsigned frame:
   - accept only if `lease_remaining > 0`;
   - decrement `lease_remaining` after accepting it;
@@ -525,6 +525,6 @@ Both sender and receiver MUST agree on:
   - Ed25519 signature: 64 bytes;
   - Poly1305 tag: 16 bytes.
 - Lease handling:
-  - valid signed frame sets `lease_remaining = n_signed`;
+  - valid signed frame sets `lease_remaining = n_signed - 1`;
   - unsigned frames consume one lease credit;
   - unsigned frames are rejected when no credits remain.
