@@ -87,8 +87,51 @@ function headerFields(headerHex: string) {
 
 function storeWithKey() {
   const store = new InMemoryKeyStore();
-  store.setKey(7, hex(testVectors.aeadKey));
+
+  store.setKey(
+    7,
+    hex(testVectors.aeadKey),
+  );
+
   return store;
+}
+
+async function publicKey(): Promise<Uint8Array> {
+  return ed25519.getPublicKeyAsync(
+    hex(testVectors.ed25519Seed),
+  );
+}
+
+async function makeFrame(
+  ctr: bigint,
+  nSigned: number,
+  signed: boolean,
+): Promise<Frame> {
+  return encryptFrame(
+    storeWithKey(),
+    hex(testVectors.ed25519Seed),
+    7,
+    ctr,
+    nSigned,
+    signed,
+    1,
+    0,
+    new Uint8Array([0]),
+  );
+}
+
+async function decryptGeneratedFrame(
+  frame: Frame,
+  lease: { remaining: number },
+) {
+  return decryptFrame(
+    storeWithKey(),
+    frame.header.sigFlag === 1
+      ? await publicKey()
+      : new Uint8Array(),
+    lease,
+    frame.serialize(),
+  );
 }
 
 describe("WireHeader", () => {
@@ -225,23 +268,22 @@ describe("generated frame vectors", () => {
   );
 
   it.each(testVectors.frames)(
-    "$name decrypts to the expected plaintext",
+    "$name decrypts to the expected plaintext and lease",
     async (expected) => {
       const fields = headerFields(expected.header);
       const signed = fields.sigFlag === 1;
 
       const lease = { remaining: 0 };
-      const publicKey = signed
-        ? await ed25519.getPublicKeyAsync(
-            hex(testVectors.ed25519Seed),
-          )
+
+      const publicKeyValue = signed
+        ? await publicKey()
         : new Uint8Array();
 
       const plaintext = await decryptFrame(
         fields.encrypted === 1
           ? storeWithKey()
           : new InMemoryKeyStore(),
-        publicKey,
+        publicKeyValue,
         lease,
         hex(expected.frame),
       );
@@ -253,6 +295,8 @@ describe("generated frame vectors", () => {
       expect(lease.remaining).toBe(
         expected.lease,
       );
+
+      expect(lease.remaining).toBeGreaterThanOrEqual(0);
     },
   );
 
@@ -323,6 +367,101 @@ describe("generated frame vectors", () => {
     expect(serialized.slice(
       signatureOffset,
     )).toEqual(signature);
+  });
+});
+
+describe("signed-frame lease", () => {
+  it("sets lease_remaining to nSigned - 1 after a signed frame", async () => {
+    const frame = await makeFrame(1n, 4, true);
+    const lease = { remaining: 0 };
+
+    await decryptGeneratedFrame(frame, lease);
+
+    expect(lease.remaining).toBe(3);
+  });
+
+  it("sets lease_remaining to zero when nSigned is one", async () => {
+    const frame = await makeFrame(1n, 1, true);
+    const lease = { remaining: 99 };
+
+    await decryptGeneratedFrame(frame, lease);
+
+    expect(lease.remaining).toBe(0);
+  });
+
+  it("accepts no unsigned frames when nSigned is one", async () => {
+    const signed = await makeFrame(1n, 1, true);
+    const unsigned = await makeFrame(2n, 1, false);
+    const lease = { remaining: 0 };
+
+    await decryptGeneratedFrame(signed, lease);
+
+    expect(lease.remaining).toBe(0);
+
+    await expect(
+      decryptGeneratedFrame(unsigned, lease),
+    ).rejects.toThrow();
+
+    expect(lease.remaining).toBe(0);
+  });
+
+  it("accepts exactly nSigned - 1 unsigned frames", async () => {
+    const signed = await makeFrame(1n, 3, true);
+    const unsigned1 = await makeFrame(2n, 3, false);
+    const unsigned2 = await makeFrame(3n, 3, false);
+    const unsigned3 = await makeFrame(4n, 3, false);
+    const lease = { remaining: 0 };
+
+    await decryptGeneratedFrame(signed, lease);
+    expect(lease.remaining).toBe(2);
+
+    await decryptGeneratedFrame(unsigned1, lease);
+    expect(lease.remaining).toBe(1);
+
+    await decryptGeneratedFrame(unsigned2, lease);
+    expect(lease.remaining).toBe(0);
+
+    await expect(
+      decryptGeneratedFrame(unsigned3, lease),
+    ).rejects.toThrow();
+
+    expect(lease.remaining).toBe(0);
+  });
+
+  it("does not apply the lease when signing is disabled", async () => {
+    const unsigned1 = await makeFrame(1n, 0, false);
+    const unsigned2 = await makeFrame(2n, 0, false);
+    const unsigned3 = await makeFrame(3n, 0, false);
+    const lease = { remaining: 7 };
+
+    await decryptGeneratedFrame(unsigned1, lease);
+    expect(lease.remaining).toBe(7);
+
+    await decryptGeneratedFrame(unsigned2, lease);
+    expect(lease.remaining).toBe(7);
+
+    await decryptGeneratedFrame(unsigned3, lease);
+    expect(lease.remaining).toBe(7);
+  });
+
+  it("never makes lease_remaining negative", async () => {
+    const signed = await makeFrame(1n, 2, true);
+    const unsigned1 = await makeFrame(2n, 2, false);
+    const unsigned2 = await makeFrame(3n, 2, false);
+    const lease = { remaining: 0 };
+
+    await decryptGeneratedFrame(signed, lease);
+    expect(lease.remaining).toBe(1);
+
+    await decryptGeneratedFrame(unsigned1, lease);
+    expect(lease.remaining).toBe(0);
+
+    await expect(
+      decryptGeneratedFrame(unsigned2, lease),
+    ).rejects.toThrow();
+
+    expect(lease.remaining).toBe(0);
+    expect(lease.remaining).toBeGreaterThanOrEqual(0);
   });
 });
 
@@ -413,4 +552,3 @@ describe("Frame errors", () => {
     )).toThrow();
   });
 });
-
