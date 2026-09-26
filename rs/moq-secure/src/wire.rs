@@ -247,11 +247,23 @@ impl Frame {
         broadcaster_public_key: &ed25519_dalek::VerifyingKey,
         lease_remaining: &mut u8,
     ) -> Result<Vec<u8>, MoqSecureError> {
-        if self.header.n_signed == 0 {
+        let signing_enabled = self.header.n_signed > 0;
+        let signed = self.header.sig_flag == 1;
+
+        /*
+         * Validate the signing state and verify signatures first.
+         *
+         * The lease is intentionally not modified here. It is updated
+         * only after decryption and padding validation succeed.
+         */
+        let next_lease_remaining = if !signing_enabled {
             if self.header.sig_flag != 0 || self.signature.is_some() {
                 return Err(MoqSecureError::SigningMismatch);
             }
-        } else if self.header.sig_flag == 1 {
+
+            // Signing is disabled; the lease mechanism does not apply.
+            None
+        } else if signed {
             let signature_bytes = self
                 .signature
                 .ok_or(MoqSecureError::InvalidSignature)?;
@@ -265,14 +277,23 @@ impl Frame {
                 .verify(&digest, &signature)
                 .map_err(|_| MoqSecureError::InvalidSignature)?;
 
-            *lease_remaining = self.header.n_signed;
+            /*
+             * The current frame is signed, so it does not consume an
+             * unsigned-frame lease slot. Only n_signed - 1 subsequent
+             * unsigned frames may be accepted.
+             */
+            Some(self.header.n_signed.saturating_sub(1))
         } else {
+            /*
+             * An unsigned frame requires a positive lease. The current
+             * frame consumes one lease slot.
+             */
             if *lease_remaining == 0 {
                 return Err(MoqSecureError::InvalidSignature);
             }
 
-            *lease_remaining -= 1;
-        }
+            Some(lease_remaining.saturating_sub(1))
+        };
 
         let padded_plaintext = if self.header.encrypted == 1 {
             let key = key_store
@@ -299,6 +320,7 @@ impl Frame {
         pad_len_bytes.copy_from_slice(&padded_plaintext[..PAD_LEN_FIELD_LEN]);
 
         let pad_len = u32::from_be_bytes(pad_len_bytes) as usize;
+
         let content_start = PAD_LEN_FIELD_LEN
             .checked_add(pad_len)
             .ok_or(MoqSecureError::InvalidPadLength)?;
@@ -307,7 +329,20 @@ impl Frame {
             return Err(MoqSecureError::InvalidPadLength);
         }
 
-        Ok(padded_plaintext[content_start..].to_vec())
+        let plaintext = padded_plaintext[content_start..].to_vec();
+
+        /*
+         * Commit the lease update only after the frame has been fully
+         * authenticated, decrypted, and padding-validated.
+         *
+         * When signing is disabled, the lease mechanism does not apply,
+         * so the existing lease value is left unchanged.
+         */
+        if let Some(next) = next_lease_remaining {
+            *lease_remaining = next;
+        }
+
+        Ok(plaintext)
     }
 }
 
@@ -326,7 +361,11 @@ pub fn encrypt_frame(
         return Err(MoqSecureError::InvalidEncryptedFlag(encrypted));
     }
 
-    let sig_flag = if n_signed != 0 && maybe_sign { 1 } else { 0 };
+    let sig_flag = if n_signed != 0 && maybe_sign {
+        1
+    } else {
+        0
+    };
 
     let header = WireHeader {
         magic: MAGIC,
@@ -341,6 +380,7 @@ pub fn encrypt_frame(
     header.validate()?;
 
     let pad_len_usize = pad_len as usize;
+
     let mut padded_plaintext = Vec::with_capacity(
         PAD_LEN_FIELD_LEN + pad_len_usize + plaintext.len(),
     );
