@@ -46,6 +46,7 @@ function frameRecord(
   frame: Frame,
   plaintext: Uint8Array,
   padLen: number,
+  initialLease: number,
   lease: number,
 ) {
   return {
@@ -59,6 +60,7 @@ function frameRecord(
     signature: frame.signature
       ? hex(frame.signature)
       : null,
+    initialLease,
     lease,
   };
 }
@@ -177,10 +179,15 @@ for (const testCase of cases) {
     testCase.plaintext,
   );
 
+  // This is the lease state required before decrypting this frame.
+  const initialLease = leaseRemaining;
+
   if (testCase.nSigned > 0) {
     if (testCase.maybeSign) {
+      // A signed frame establishes a new lease.
       leaseRemaining = testCase.nSigned - 1;
     } else {
+      // An unsigned frame consumes one existing lease slot.
       if (leaseRemaining === 0) {
         throw new Error(
           `unsigned frame has no remaining lease: ${testCase.name}`,
@@ -197,6 +204,7 @@ for (const testCase of cases) {
       frame,
       testCase.plaintext,
       testCase.padLen,
+      initialLease,
       leaseRemaining,
     ),
   );
