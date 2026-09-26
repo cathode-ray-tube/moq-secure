@@ -257,7 +257,7 @@ The initial value is zero.
 For a valid signed frame:
 
 ```text
-lease_remaining = n_signed
+lease_remaining = n_signed - 1
 ```
 
 For an unsigned frame:
