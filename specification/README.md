@@ -439,6 +439,8 @@ Total frame sizes are:
 | `0` — unencrypted | `1` | `17 + N + 64 = 81 + N` |
 | `0` — unencrypted | `0` | `17 + N` |
 
+Therefore:
+
 | `encryption_type` | `sig_flag` | Total size |
 |---:|---:|---:|
 | `2` — AES-256-GCM | `1` | `101 + pad_len + P` |
