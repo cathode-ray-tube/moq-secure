@@ -13,6 +13,7 @@ import {
   InMemoryKeyStore,
   deriveNonce12,
   encryptFrame,
+  type EncryptionType,
   type Frame,
 } from "../js/src/index.js";
 
@@ -91,23 +92,25 @@ const nonceVectors = nonceInputs.map(({ keyId, ctr }) => ({
   nonce: hex(deriveNonce12(keyId, ctr)),
 }));
 
-const cases: Array<{
+type TestCase = {
   name: string;
   keyId: number;
   ctr: bigint;
   nSigned: number;
   maybeSign: boolean;
-  encrypted: number;
+  encryptionType: EncryptionType;
   padLen: number;
   plaintext: Uint8Array;
-}> = [
+};
+
+const cases: TestCase[] = [
   {
     name: "encrypted_unsigned_empty",
     keyId: 7,
     ctr: 0n,
     nSigned: 0,
     maybeSign: false,
-    encrypted: 1,
+    encryptionType: 1,
     padLen: 0,
     plaintext: new Uint8Array(),
   },
@@ -117,7 +120,7 @@ const cases: Array<{
     ctr: 1n,
     nSigned: 0,
     maybeSign: false,
-    encrypted: 1,
+    encryptionType: 1,
     padLen: 3,
     plaintext: bytes(0, 1, 2, 127, 128, 254, 255),
   },
@@ -127,7 +130,7 @@ const cases: Array<{
     ctr: 2n,
     nSigned: 3,
     maybeSign: true,
-    encrypted: 1,
+    encryptionType: 1,
     padLen: 5,
     plaintext: utf8("signed encrypted media"),
   },
@@ -137,7 +140,7 @@ const cases: Array<{
     ctr: 3n,
     nSigned: 0,
     maybeSign: false,
-    encrypted: 0,
+    encryptionType: 0,
     padLen: 2,
     plaintext: utf8("cleartext"),
   },
@@ -147,7 +150,7 @@ const cases: Array<{
     ctr: 4n,
     nSigned: 2,
     maybeSign: true,
-    encrypted: 0,
+    encryptionType: 0,
     padLen: 1,
     plaintext: bytes(0xde, 0xad, 0xbe, 0xef),
   },
@@ -157,9 +160,51 @@ const cases: Array<{
     ctr: 5n,
     nSigned: 1,
     maybeSign: true,
-    encrypted: 1,
+    encryptionType: 1,
     padLen: 0,
     plaintext: utf8("signed once"),
+  },
+
+  // AES-256-GCM vectors.
+  {
+    name: "aes256gcm_unsigned_empty",
+    keyId: 7,
+    ctr: 10n,
+    nSigned: 0,
+    maybeSign: false,
+    encryptionType: 2,
+    padLen: 0,
+    plaintext: new Uint8Array(),
+  },
+  {
+    name: "aes256gcm_unsigned_binary",
+    keyId: 7,
+    ctr: 11n,
+    nSigned: 0,
+    maybeSign: false,
+    encryptionType: 2,
+    padLen: 3,
+    plaintext: bytes(0, 1, 2, 127, 128, 254, 255),
+  },
+  {
+    name: "aes256gcm_signed",
+    keyId: 7,
+    ctr: 12n,
+    nSigned: 3,
+    maybeSign: true,
+    encryptionType: 2,
+    padLen: 5,
+    plaintext: utf8("signed AES-GCM media"),
+  },
+  {
+    name: "aes256gcm_signed_once",
+    keyId: 7,
+    ctr: 13n,
+    nSigned: 1,
+    maybeSign: true,
+    encryptionType: 2,
+    padLen: 0,
+    plaintext: utf8("AES-GCM signed once"),
   },
 ];
 
@@ -174,20 +219,17 @@ for (const testCase of cases) {
     testCase.ctr,
     testCase.nSigned,
     testCase.maybeSign,
-    testCase.encrypted,
+    testCase.encryptionType,
     testCase.padLen,
     testCase.plaintext,
   );
 
-  // This is the lease state required before decrypting this frame.
   const initialLease = leaseRemaining;
 
   if (testCase.nSigned > 0) {
     if (testCase.maybeSign) {
-      // A signed frame establishes a new lease.
       leaseRemaining = testCase.nSigned - 1;
     } else {
-      // An unsigned frame consumes one existing lease slot.
       if (leaseRemaining === 0) {
         throw new Error(
           `unsigned frame has no remaining lease: ${testCase.name}`,
