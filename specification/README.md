@@ -4,12 +4,12 @@
 
 # Encryption (ChaCha20-Poly1305 or AES-256-GCM) and Ed25519 Signing
 
-This document defines a wire format for encrypted media payloads transmitted via Media Over QUIC (MOQ).
+This document defines a wire format for encrypted media payloads transmitted via Media over QUIC (MoQ).
 
 ## Goals
 
 - Encrypt only the media payload; the transport treats the bytes as opaque.
-- Nest the entire MOQ-Secure frame inside the MOQ frame payload.
+- Nest the entire MoQ-Secure frame inside the MoQ frame payload.
 - Support ChaCha20-Poly1305 and AES-256-GCM, ensuring performance across devices.
 - Provide authenticity through Ed25519 signatures on selected frames.
 - Indicate signing frequency through `n_signed` value.
