@@ -6,6 +6,7 @@ import {
   aeadDecrypt,
   aeadEncrypt,
   sha256Digest,
+  type AeadAlgorithm,
 } from "../src/crypto.js";
 import { deriveNonce12 } from "../src/nonce.js";
 
@@ -27,6 +28,11 @@ type TestVectors = {
 };
 
 const testVectors = vectors as TestVectors;
+
+const algorithms: AeadAlgorithm[] = [
+  "CHACHA20-POLY1305",
+  "AES-256-GCM",
+];
 
 const hex = (value: string): Uint8Array =>
   Uint8Array.from(
@@ -96,7 +102,7 @@ describe("crypto", () => {
     );
   });
 
-  it("matches the generated encrypted empty-frame vector", () => {
+  it("matches the generated encrypted empty-frame vector", async () => {
     const expected = frameVector("encrypted_unsigned_empty");
     const header = hex(expected.header);
     const serialized = hex(expected.frame);
@@ -111,7 +117,8 @@ describe("crypto", () => {
     const keyId = header[5];
     const ctr = readU64BE(header, 6);
 
-    const result = aeadEncrypt(
+    const result = await aeadEncrypt(
+      "CHACHA20-POLY1305",
       key,
       keyId,
       ctr,
@@ -128,8 +135,9 @@ describe("crypto", () => {
 
     expect(result.tag).toEqual(tag);
 
-    expect(
+    await expect(
       aeadDecrypt(
+        "CHACHA20-POLY1305",
         key,
         keyId,
         ctr,
@@ -137,36 +145,26 @@ describe("crypto", () => {
         result.ciphertext,
         result.tag,
       ),
-    ).toEqual(paddedPlaintext);
+    ).resolves.toEqual(paddedPlaintext);
   });
 
-  it("matches the generated encrypted binary-frame vector", () => {
+  it("matches the generated encrypted binary-frame vector", async () => {
     const expected = frameVector("encrypted_unsigned_binary");
     const header = hex(expected.header);
     const serialized = hex(expected.frame);
     const tag = hex(expected.tag);
 
     const paddedPlaintext = Uint8Array.from([
-      0x00,
-      0x00,
-      0x00,
-      0x03, // pad_len = 3
-      0x00,
-      0x00,
-      0x00, // three zero-padding bytes
-      0x00,
-      0x01,
-      0x02,
-      0x7f,
-      0x80,
-      0xfe,
-      0xff,
+      0x00, 0x00, 0x00, 0x03,
+      0x00, 0x00, 0x00,
+      0x00, 0x01, 0x02, 0x7f, 0x80, 0xfe, 0xff,
     ]);
 
     const keyId = header[5];
     const ctr = readU64BE(header, 6);
 
-    const result = aeadEncrypt(
+    const result = await aeadEncrypt(
+      "CHACHA20-POLY1305",
       key,
       keyId,
       ctr,
@@ -183,8 +181,9 @@ describe("crypto", () => {
 
     expect(result.tag).toEqual(tag);
 
-    expect(
+    await expect(
       aeadDecrypt(
+        "CHACHA20-POLY1305",
         key,
         keyId,
         ctr,
@@ -192,49 +191,56 @@ describe("crypto", () => {
         result.ciphertext,
         result.tag,
       ),
-    ).toEqual(paddedPlaintext);
+    ).resolves.toEqual(paddedPlaintext);
   });
 
-  it("round-trips binary plaintext", () => {
-    const aad = hex(
-      "4d4f515301070000000000000000000000000001",
-    );
+  it.each(algorithms)(
+    "round-trips binary plaintext with %s",
+    async (algorithm) => {
+      const aad = hex(
+        "4d4f515301070000000000000000000000000001",
+      );
 
-    const plaintext = hex("0001027f80feff");
+      const plaintext = hex("0001027f80feff");
 
-    const result = aeadEncrypt(
-      key,
-      7,
-      1n,
-      aad,
-      plaintext,
-    );
-
-    expect(
-      aeadDecrypt(
+      const result = await aeadEncrypt(
+        algorithm,
         key,
         7,
         1n,
         aad,
-        result.ciphertext,
-        result.tag,
-      ),
-    ).toEqual(plaintext);
-  });
+        plaintext,
+      );
 
-  it("rejects keys of the wrong length", () => {
-    expect(() =>
+      await expect(
+        aeadDecrypt(
+          algorithm,
+          key,
+          7,
+          1n,
+          aad,
+          result.ciphertext,
+          result.tag,
+        ),
+      ).resolves.toEqual(plaintext);
+    },
+  );
+
+  it("rejects keys of the wrong length", async () => {
+    await expect(
       aeadEncrypt(
+        "AES-256-GCM",
         new Uint8Array(31),
         0,
         0n,
         new Uint8Array(),
         new Uint8Array(),
       ),
-    ).toThrow("AEAD key must be 32 bytes");
+    ).rejects.toThrow("AEAD key must be 32 bytes");
 
-    expect(() =>
+    await expect(
       aeadDecrypt(
+        "AES-256-GCM",
         new Uint8Array(31),
         0,
         0n,
@@ -242,41 +248,76 @@ describe("crypto", () => {
         new Uint8Array(),
         new Uint8Array(16),
       ),
-    ).toThrowError(
+    ).rejects.toThrowError(
       expect.objectContaining({
         code: "AeadAuthFailed",
       }),
     );
   });
 
-  it("rejects an invalid authentication tag", () => {
-    const result = aeadEncrypt(
-      key,
-      1,
-      2n,
-      new Uint8Array([9]),
-      new Uint8Array([1, 2, 3]),
-    );
-
-    result.tag[0] ^= 1;
-
-    expect(() =>
-      aeadDecrypt(
+  it.each(algorithms)(
+    "rejects an invalid authentication tag with %s",
+    async (algorithm) => {
+      const result = await aeadEncrypt(
+        algorithm,
         key,
         1,
         2n,
         new Uint8Array([9]),
-        result.ciphertext,
-        result.tag,
-      ),
-    ).toThrowError(
-      expect.objectContaining({
-        code: "AeadAuthFailed",
-      }),
-    );
-  });
+        new Uint8Array([1, 2, 3]),
+      );
 
-   it("derives the expected nonce", () => {
+      result.tag[0] ^= 1;
+
+      await expect(
+        aeadDecrypt(
+          algorithm,
+          key,
+          1,
+          2n,
+          new Uint8Array([9]),
+          result.ciphertext,
+          result.tag,
+        ),
+      ).rejects.toThrowError(
+        expect.objectContaining({
+          code: "AeadAuthFailed",
+        }),
+      );
+    },
+  );
+
+  it.each(algorithms)(
+    "rejects modified AAD with %s",
+    async (algorithm) => {
+      const result = await aeadEncrypt(
+        algorithm,
+        key,
+        7,
+        42n,
+        new Uint8Array([1, 2, 3]),
+        new Uint8Array([9, 8, 7]),
+      );
+
+      await expect(
+        aeadDecrypt(
+          algorithm,
+          key,
+          7,
+          42n,
+          new Uint8Array([1, 2, 4]),
+          result.ciphertext,
+          result.tag,
+        ),
+      ).rejects.toThrowError(
+        expect.objectContaining({
+          code: "AeadAuthFailed",
+        }),
+      );
+    },
+  );
+
+  it("derives the expected nonce", () => {
     expect(deriveNonce12(7, 42n)).toEqual(
       hex("6e6f6e07000000000000002a"),
     );
