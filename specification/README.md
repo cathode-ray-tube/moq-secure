@@ -450,9 +450,9 @@ Therefore:
 | `0` — unencrypted | `1` | `85 + pad_len + P` |
 | `0` — unencrypted | `0` | `21 + pad_len + P` |
 
----
-
 By utilizing the *lease system* and signing only *some* frames, bytes overhead and performance hit can be reduced, particularly benefiting low-spec devices.
+
+---
 
 ## 8. Invalid Frames
 
