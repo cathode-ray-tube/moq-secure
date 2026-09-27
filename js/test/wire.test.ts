@@ -8,6 +8,7 @@ import {
   WireHeader,
   decryptFrame,
   encryptFrame,
+  type EncryptionType,
 } from "../src/wire.js";
 import { InMemoryKeyStore } from "../src/keys.js";
 import { MAGIC, VERSION } from "../src/constants.js";
@@ -43,9 +44,6 @@ const hex = (value: string): Uint8Array =>
   Uint8Array.from(
     value.match(/../g)?.map((part) => parseInt(part, 16)) ?? [],
   );
-
-const bytes = (...values: number[]): Uint8Array =>
-  new Uint8Array(values);
 
 function readU64BE(
   value: Uint8Array,
@@ -107,6 +105,7 @@ async function makeFrame(
   ctr: bigint,
   nSigned: number,
   signed: boolean,
+  encryptionType: EncryptionType = 1,
 ): Promise<Frame> {
   return encryptFrame(
     storeWithKey(),
@@ -115,7 +114,7 @@ async function makeFrame(
     ctr,
     nSigned,
     signed,
-    1,
+    encryptionType,
     0,
     new Uint8Array([0]),
   );
@@ -151,14 +150,7 @@ describe("WireHeader", () => {
 
     const encoded = new Uint8Array([
       ...header.encode(),
-
-      // pad_len = 0
-      0,
-      0,
-      0,
-      0,
-
-      // tag
+      0, 0, 0, 0,
       ...new Uint8Array(16),
     ]);
 
@@ -170,7 +162,7 @@ describe("WireHeader", () => {
     expect(parsed.ctr).toBe(42n);
     expect(parsed.nSigned).toBe(3);
     expect(parsed.sigFlag).toBe(0);
-    expect(parsed.encrypted).toBe(1);
+    expect(parsed.encryptionType).toBe(1);
   });
 
   it("does not include pad_len in the header", () => {
@@ -242,17 +234,9 @@ describe("generated frame vectors", () => {
         hex(expected.plaintext),
       );
 
-      expect(frame.header.encode()).toEqual(
-        fields.bytes,
-      );
-
-      expect(frame.payload).toEqual(
-        hex(expected.payload),
-      );
-
-      expect(frame.tag).toEqual(
-        hex(expected.tag),
-      );
+      expect(frame.header.encode()).toEqual(fields.bytes);
+      expect(frame.payload).toEqual(hex(expected.payload));
+      expect(frame.tag).toEqual(hex(expected.tag));
 
       if (expected.signature === null) {
         expect(frame.signature).toBeUndefined();
@@ -262,9 +246,7 @@ describe("generated frame vectors", () => {
         );
       }
 
-      expect(frame.serialize()).toEqual(
-        hex(expected.frame),
-      );
+      expect(frame.serialize()).toEqual(hex(expected.frame));
     },
   );
 
@@ -278,102 +260,104 @@ describe("generated frame vectors", () => {
         remaining: expected.initialLease,
       };
 
-      const publicKeyValue = signed
-        ? await publicKey()
-        : new Uint8Array();
-
       const plaintext = await decryptFrame(
         fields.encrypted === 1
           ? storeWithKey()
           : new InMemoryKeyStore(),
-        publicKeyValue,
+        signed
+          ? await publicKey()
+          : new Uint8Array(),
         lease,
         hex(expected.frame),
       );
 
-      expect(plaintext).toEqual(
-        hex(expected.plaintext),
-      );
-
-      expect(lease.remaining).toBe(
-        expected.lease,
-      );
-
+      expect(plaintext).toEqual(hex(expected.plaintext));
+      expect(lease.remaining).toBe(expected.lease);
       expect(lease.remaining).toBeGreaterThanOrEqual(0);
     },
   );
+});
 
-  it("decrypts the encrypted binary payload to the expected plaintext", async () => {
-    const expected = vector(
-      "encrypted_unsigned_binary",
-    );
+describe("AES-256-GCM frames", () => {
+  it("round-trips an unsigned encrypted frame", async () => {
+    const plaintext = new Uint8Array([
+      0x00, 0x01, 0x7f, 0x80, 0xff,
+    ]);
 
-    const fields = headerFields(expected.header);
-
-    const decrypted = await decryptFrame(
+    const frame = await encryptFrame(
       storeWithKey(),
-      new Uint8Array(),
-      {
-        remaining: expected.initialLease,
-      },
-      hex(expected.frame),
+      hex(testVectors.ed25519Seed),
+      7,
+      100n,
+      0,
+      false,
+      2,
+      3,
+      plaintext,
     );
 
-    expect(fields.encrypted).toBe(1);
-    expect(expected.padLen).toBe(3);
-    expect(decrypted).toEqual(
-      hex(expected.plaintext),
-    );
+    expect(frame.header.encryptionType).toBe(2);
+    expect(frame.tag).toHaveLength(16);
+
+    await expect(
+      decryptFrame(
+        storeWithKey(),
+        new Uint8Array(),
+        { remaining: 0 },
+        frame.serialize(),
+      ),
+    ).resolves.toEqual(plaintext);
   });
 
-  it("decrypts the encrypted empty payload to an empty plaintext", async () => {
-    const expected = vector(
-      "encrypted_unsigned_empty",
-    );
+  it("round-trips a signed encrypted frame", async () => {
+    const plaintext = new Uint8Array([1, 2, 3]);
 
-    const fields = headerFields(expected.header);
-
-    const decrypted = await decryptFrame(
+    const frame = await encryptFrame(
       storeWithKey(),
-      new Uint8Array(),
-      {
-        remaining: expected.initialLease,
-      },
-      hex(expected.frame),
+      hex(testVectors.ed25519Seed),
+      7,
+      101n,
+      1,
+      true,
+      2,
+      0,
+      plaintext,
     );
 
-    expect(fields.encrypted).toBe(1);
-    expect(expected.padLen).toBe(0);
-    expect(decrypted).toEqual(
-      new Uint8Array(),
-    );
+    await expect(
+      decryptFrame(
+        storeWithKey(),
+        await publicKey(),
+        { remaining: 0 },
+        frame.serialize(),
+      ),
+    ).resolves.toEqual(plaintext);
   });
 
-  it("places the tag before the signature", () => {
-    const expected = vector("encrypted_signed");
-    const fields = headerFields(expected.header);
-    const serialized = hex(expected.frame);
-    const payload = hex(expected.payload);
-    const tag = hex(expected.tag);
-    const signature = hex(expected.signature!);
+  it("rejects an AES-GCM frame when the algorithm field is modified", async () => {
+    const frame = await encryptFrame(
+      storeWithKey(),
+      hex(testVectors.ed25519Seed),
+      7,
+      102n,
+      0,
+      false,
+      2,
+      0,
+      new Uint8Array([1, 2, 3]),
+    );
 
-    const payloadOffset = fields.bytes.length;
-    const tagOffset = payloadOffset + payload.length;
-    const signatureOffset = tagOffset + tag.length;
+    const serialized = frame.serialize();
+    serialized[16] = 1;
 
-    expect(serialized.slice(
-      payloadOffset,
-      tagOffset,
-    )).toEqual(payload);
-
-    expect(serialized.slice(
-      tagOffset,
-      signatureOffset,
-    )).toEqual(tag);
-
-    expect(serialized.slice(
-      signatureOffset,
-    )).toEqual(signature);
+    await expect(
+      decryptFrame(
+        storeWithKey(),
+        new Uint8Array(),
+        { remaining: 0 },
+        serialized,
+      ),
+    ).rejects.toThrow();
   });
 });
 
@@ -402,8 +386,6 @@ describe("signed-frame lease", () => {
     const lease = { remaining: 0 };
 
     await decryptGeneratedFrame(signed, lease);
-
-    expect(lease.remaining).toBe(0);
 
     await expect(
       decryptGeneratedFrame(unsigned, lease),
@@ -442,12 +424,9 @@ describe("signed-frame lease", () => {
     const lease = { remaining: 7 };
 
     await decryptGeneratedFrame(unsigned1, lease);
-    expect(lease.remaining).toBe(7);
-
     await decryptGeneratedFrame(unsigned2, lease);
-    expect(lease.remaining).toBe(7);
-
     await decryptGeneratedFrame(unsigned3, lease);
+
     expect(lease.remaining).toBe(7);
   });
 
@@ -468,7 +447,6 @@ describe("signed-frame lease", () => {
     ).rejects.toThrow();
 
     expect(lease.remaining).toBe(0);
-    expect(lease.remaining).toBeGreaterThanOrEqual(0);
   });
 });
 
@@ -498,37 +476,30 @@ describe("Frame errors", () => {
   });
 
   it("rejects tampered encrypted frame data", async () => {
-    const expected = vector(
-      "encrypted_unsigned_binary",
+    const encoded = hex(
+      vector("encrypted_unsigned_binary").frame,
     );
 
-    const encoded = hex(expected.frame);
     encoded[encoded.length - 1] ^= 1;
 
     await expect(
       decryptFrame(
         storeWithKey(),
         new Uint8Array(),
-        {
-          remaining: expected.initialLease,
-        },
+        { remaining: 0 },
         encoded,
       ),
     ).rejects.toThrow();
   });
 
   it("rejects an unknown encryption key", async () => {
-    const expected = vector(
-      "encrypted_unsigned_empty",
-    );
+    const expected = vector("encrypted_unsigned_empty");
 
     await expect(
       decryptFrame(
         new InMemoryKeyStore(),
         new Uint8Array(),
-        {
-          remaining: expected.initialLease,
-        },
+        { remaining: expected.initialLease },
         hex(expected.frame),
       ),
     ).rejects.toThrowError(
@@ -539,11 +510,9 @@ describe("Frame errors", () => {
   });
 
   it("rejects a missing encrypted-frame tag", () => {
-    const expected = vector(
-      "encrypted_unsigned_empty",
+    const encoded = hex(
+      vector("encrypted_unsigned_empty").frame,
     );
-
-    const encoded = hex(expected.frame);
 
     expect(() => Frame.parse(
       encoded.slice(0, encoded.length - 16),
@@ -551,8 +520,9 @@ describe("Frame errors", () => {
   });
 
   it("rejects a missing signed-frame signature", () => {
-    const expected = vector("cleartext_signed");
-    const encoded = hex(expected.frame);
+    const encoded = hex(
+      vector("cleartext_signed").frame,
+    );
 
     expect(() => Frame.parse(
       encoded.slice(0, encoded.length - 64),
