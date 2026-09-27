@@ -8,9 +8,9 @@
 [![Downloads](https://img.shields.io/crates/d/moq-secure.svg)](https://crates.io/crates/moq-secure)
 [![docs.rs](https://img.shields.io/docsrs/moq-secure)](https://docs.rs/moq-secure)
 
-# MOQ-Secure Encryption & Signing
+# MoQ-Secure Encryption & Signing
 
-A fixed format for end-to-end secure **media payloads** carried by **Media Over QUIC (MOQ)**.
+A fixed format for end-to-end secure **media payloads** carried by **Media over QUIC (MoQ)**.
 
 Encryption algorithms:
 - **ChaCha20-Poly1305**
@@ -19,19 +19,19 @@ Encryption algorithms:
 Signature algorithm:
 - **Ed25519**
 
-> **Payload-Only Encryption:** MOQ is a content-agnostic transport format. MOQ-Secure encrypts only the frame’s media payload bytes. Transport framing and routing remain unchanged. **Metadata such as broadcast name, media codec and resolution remains unencrypted and visible to the relay.**
+> **Payload-Only Encryption:** MoQ is a content-agnostic transport format. MoQ-Secure encrypts only the frame’s media payload bytes. Transport framing and routing remain unchanged. **Metadata such as broadcast name, media codec and resolution remains unencrypted and visible to the relay.**
 
 ## Purpose
 
 People increasingly want to protect their communications from pervasive monitoring and mass surveillance. At the same time, audiences need confidence that media is genuine: in an era of deepfakes, you often can’t tell whether a video or audio clip truly came from the person it claims to be.
 
-MOQ-Secure is designed to provide:
+MoQ-Secure is designed to provide:
 - **Privacy** for the media payload - so content can’t be inspected in transit
 - **Integrity** - so tampering is detected
 - **Authenticity** - so frames can be verified as coming from a particular publisher
 - **Flexibility** - balancing security and performance
 
-Publishers are able to use **any** public MOQ CDN, with the hosting provider unable to see the content. Consumers can verify the publisher of the content, wherever they receive it from.
+Publishers are able to use **any** public MoQ CDN, with the hosting provider unable to see the content. Consumers can verify the publisher of the content, wherever they receive it from.
 
 ## Quick Start (moq-secure-chat-cli):
 
@@ -101,7 +101,7 @@ This is a demo app, with usability prioritized. For production, hardening would 
 
 A native desktop player for MoQ streams using Rust, GTK4 and GStreamer.
 
-MOQ-Secure is not yet integrated.
+MoQ-Secure is not yet integrated.
 
 ### Supported platforms
 
@@ -380,9 +380,9 @@ Quick reference [format](https://github.com/cathode-ray-tube/moq-secure/blob/mai
 
 ## Interoperability
 
-Only encrypts the payload so it should work with any MOQ implementation (moq-lite, IETF implementations, etc.).
+Only encrypts the payload so it should work with any MoQ implementation (moq-lite, IETF implementations, etc.).
 
-While aimed at MOQ, with some additional wiring it could encrypt and sign data sent via other transports (such as WebSockets, WebRTC Data Channels, etc).
+While aimed at MoQ, with some additional wiring it could encrypt and sign data sent via other transports (such as WebSockets, WebRTC Data Channels, etc).
 
 This repo contains implementations in [rust](https://github.com/cathode-ray-tube/moq-secure/tree/main/rs) and [javascript](https://github.com/cathode-ray-tube/moq-secure/tree/main/js). Compatability considerations between the two are in [interoperability](https://github.com/cathode-ray-tube/moq-secure/blob/main/interoperability/README.md).
 
