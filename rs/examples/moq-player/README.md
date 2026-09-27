@@ -4,7 +4,7 @@
 
 A native desktop player for MoQ streams using Rust, GTK4 and GStreamer.
 
-MOQ-Secure is not yet integrated.
+MoQ-Secure is not yet integrated.
 
 This forms the basis of a MoQ media player (including encryption/signing).  I will include this in my [moq-tv](https://github.com/cathode-ray-tube/moq-tv) repo (mainly targeting Smart TVs at the moment).
 
