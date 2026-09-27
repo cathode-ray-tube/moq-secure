@@ -248,11 +248,7 @@ describe("crypto", () => {
         new Uint8Array(),
         new Uint8Array(16),
       ),
-    ).rejects.toThrowError(
-      expect.objectContaining({
-        code: "AeadAuthFailed",
-      }),
-    );
+    ).rejects.toThrow("AEAD key must be 32 bytes");
   });
 
   it.each(algorithms)(
