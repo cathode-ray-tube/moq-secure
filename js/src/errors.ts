@@ -14,6 +14,7 @@ export type MoqSecureErrorCode =
 	| "DecryptFailed"
 	| "InvalidKeyId"
 	| "InvalidPadLength"
+	| "InvalidNSigned"
 	| "CounterExhausted";
 
 export class MoqSecureError extends Error {
