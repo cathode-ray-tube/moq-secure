@@ -11,13 +11,13 @@ pub const VERSION: u8 = 1;
 pub const SIG_SLOT_LEN: usize = 64;
 pub const PAD_LEN_FIELD_LEN: usize = 4;
 
-pub const ENCRYPTION_UNENCRYPTED: u8 = 0;
-pub const ENCRYPTION_CHACHA20_POLY1305: u8 = 1;
-pub const ENCRYPTION_AES_256_GCM: u8 = 2;
-
 // magic(4) | version(1) | key_id(1) | ctr(8) |
 // n_signed(1) | sig_flag(1) | encryption_type(1)
 pub const FIXED_HEADER_LEN: usize = 4 + 1 + 1 + 8 + 1 + 1 + 1;
+
+pub const ENCRYPTION_UNENCRYPTED: u8 = 0;
+pub const ENCRYPTION_CHACHA20_POLY1305: u8 = 1;
+pub const ENCRYPTION_AES_256_GCM: u8 = 2;
 
 fn is_valid_encryption_type(value: u8) -> bool {
     matches!(
@@ -124,10 +124,13 @@ pub struct Frame {
     ///
     /// For unencrypted frames, this is:
     ///
-    /// `pad_len (4-byte big endian) || padding || plaintext`
+    /// pad_len(4-byte big endian) || padding || plaintext
     pub header: WireHeader,
+
     pub payload: Vec<u8>,
+
     pub tag: [u8; AEAD_TAG_LEN],
+
     pub signature: Option<[u8; SIG_SLOT_LEN]>,
 }
 
@@ -137,7 +140,8 @@ impl Frame {
             return Err(MoqSecureError::TruncatedFrame);
         }
 
-        let (header_bytes, rest) = frame.split_at(FIXED_HEADER_LEN);
+        let (header_bytes, body_and_signature) =
+            frame.split_at(FIXED_HEADER_LEN);
 
         let mut offset = 0;
 
@@ -183,20 +187,23 @@ impl Frame {
             0
         };
 
-        if rest.len() < signature_len {
+        if body_and_signature.len() < signature_len {
             return Err(MoqSecureError::TruncatedFrame);
         }
 
         let (body, signature_bytes) = if signature_len == 0 {
-            (rest, None)
+            (body_and_signature, None)
         } else {
-            let body_end = rest.len() - SIG_SLOT_LEN;
-            let (body, signature) = rest.split_at(body_end);
+            let body_len = body_and_signature.len() - SIG_SLOT_LEN;
+            let (body, signature) =
+                body_and_signature.split_at(body_len);
+
             (body, Some(signature))
         };
 
         let signature = match signature_bytes {
             None => None,
+
             Some(bytes) => {
                 if bytes.len() != SIG_SLOT_LEN {
                     return Err(MoqSecureError::TruncatedFrame);
@@ -281,16 +288,16 @@ impl Frame {
     }
 
     pub fn digest_for_signature(&self) -> [u8; 32] {
-        let header = self.header.encode();
+        let header_bytes = self.header.encode();
         let encrypted = is_encrypted(self.header.encryption_type);
 
         let mut data = Vec::with_capacity(
-            header.len()
+            header_bytes.len()
                 + self.payload.len()
                 + if encrypted { AEAD_TAG_LEN } else { 0 },
         );
 
-        data.extend_from_slice(&header);
+        data.extend_from_slice(&header_bytes);
         data.extend_from_slice(&self.payload);
 
         if encrypted {
@@ -310,8 +317,9 @@ impl Frame {
         let signed = self.header.sig_flag == 1;
 
         /*
-         * Verify the signing state before decrypting. The lease is committed
-         * only after decryption and padding validation succeed.
+         * Validate the signing state and verify signatures first.
+         * The lease is updated only after decryption and padding
+         * validation succeed.
          */
         let next_lease_remaining = if !signing_enabled {
             if self.header.sig_flag != 0 || self.signature.is_some() {
@@ -494,4 +502,3 @@ pub fn decrypt_frame(
         lease_remaining,
     )
 }
-
