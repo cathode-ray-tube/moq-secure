@@ -18,7 +18,7 @@ Encryption algorithms:
 
 * JavaScript implementation now supports AES-256-GCM, with tests and test-vectors updated.
 
-**Rust tests currently fail as the test-vectors have changed. When rust code is updated, this will be fixed**
+**Rust tests currently fail as the test-vectors have changed. When rust code is updated, this will be fixed.**
 
 Signature algorithm:
 - **Ed25519**
