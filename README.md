@@ -14,7 +14,11 @@ A fixed format for end-to-end secure **media payloads** carried by **Media over 
 
 Encryption algorithms:
 - **ChaCha20-Poly1305**
-- AES-256-GCM (*Coming Soon*)
+- AES-256-GCM (*Coming Soon**)
+
+* JavaScript implementation now supports AES-256-GCM, with tests and test-vectors updated.
+
+**Rust tests currently fail as the test-vectors have changed. When rust code is updated, this will be fixed**
 
 Signature algorithm:
 - **Ed25519**
