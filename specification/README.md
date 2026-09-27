@@ -452,6 +452,8 @@ Therefore:
 
 ---
 
+By utilizing the *lease system* and signing only *some* frames, bytes overhead and performance hit can be reduced, particularly benefiting low-spec devices.
+
 ## 8. Invalid Frames
 
 A receiver SHOULD drop a frame if any of the following conditions apply:
