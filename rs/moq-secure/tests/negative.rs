@@ -434,7 +434,7 @@ fn rejects_tampered_aad_header() {
     let mut bytes = frame.serialize();
 
     // Change the counter without changing ciphertext or tag.
-    bytes[16 - 1] ^= 0x01;
+    bytes[13] ^= 0x01;
 
     let mut lease_remaining = 0;
 
