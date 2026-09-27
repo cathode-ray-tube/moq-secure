@@ -1,5 +1,6 @@
 import { MoqSecureError } from "./errors.js";
 import { encryptFrame } from "./wire.js";
+import type { AeadAlgorithm } from "./crypto.js";
 import type { KeyStore } from "./keys.js";
 
 const MAX_U64 = 0xffff_ffff_ffff_ffffn;
@@ -23,6 +24,11 @@ export interface MoqSecureEncrypterProps {
 	keyId: number;
 
 	/**
+	 * AEAD algorithm used for frame encryption.
+	 */
+	algorithm?: AeadAlgorithm;
+
+	/**
 	 * Sign every nSigned-th frame.
 	 *
 	 * 0: signing disabled
@@ -43,6 +49,7 @@ export class MoqSecureEncrypter implements FrameEncrypter {
 	readonly keyStore: KeyStore;
 	readonly signingPrivateKey: Uint8Array;
 	readonly keyId: number;
+	readonly algorithm: AeadAlgorithm;
 	readonly nSigned: number;
 	readonly padLen: number;
 
@@ -85,6 +92,8 @@ export class MoqSecureEncrypter implements FrameEncrypter {
 		this.keyStore = props.keyStore;
 		this.signingPrivateKey = props.signingPrivateKey.slice();
 		this.keyId = props.keyId;
+		this.algorithm =
+			props.algorithm ?? "CHACHA20-POLY1305";
 		this.nSigned = props.nSigned;
 		this.padLen = props.padLen;
 		this.#ctr = initialCtr;
@@ -146,9 +155,9 @@ export class MoqSecureEncrypter implements FrameEncrypter {
 			1,
 			this.padLen,
 			plaintext,
+			this.algorithm,
 		);
 
 		return frame.serialize();
 	}
 }
-
