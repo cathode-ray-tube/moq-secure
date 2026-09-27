@@ -18,7 +18,7 @@ Encryption algorithms:
 
 *JavaScript implementation now supports AES-256-GCM, with tests and test-vectors updated.
 
-**Rust tests currently fail as the test-vectors have changed. When rust code is updated, this will be fixed. Use one of the crates.io published versions until then.**
+**Rust tests currently fail as the test-vectors have changed. When rust code is updated, this will be fixed. Use one of the crates.io published version 0.1.3 until then.**
 
 Signature algorithm:
 - **Ed25519**
