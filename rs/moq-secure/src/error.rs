@@ -8,6 +8,9 @@ pub enum MoqSecureError {
     #[error("unsupported version: {0}")]
     UnsupportedVersion(u8),
 
+    #[error("unsupported AEAD algorithm: {0}")]
+    UnsupportedAlgorithm(u8),
+
     #[error("not enough bytes in frame")]
     TruncatedFrame,
 
@@ -17,10 +20,7 @@ pub enum MoqSecureError {
     #[error("invalid padding length")]
     InvalidPadLength,
 
-    #[error("encrypted flag must be 0 or 1, got {0}")]
-    InvalidEncryptedFlag(u8),
-
-    #[error("sigFlag must be 0 or 1, got {0}")]
+    #[error("invalid sigFlag: expected 0 or 1, got {0}")]
     InvalidSigFlag(u8),
 
     #[error("AEAD authentication failed")]
@@ -30,16 +30,16 @@ pub enum MoqSecureError {
     InvalidSignature,
 
     #[error(
-        "signing is disabled but sigFlag indicates signature or sigSlot is non-zero"
+        "signing is disabled but sigFlag indicates a signature or sigSlot is non-zero"
     )]
     SigningMismatch,
 
     #[error(
-        "signing enabled but sigFlag indicates signature while sigSlot is missing or zero"
+        "signing enabled but sigFlag indicates a signature while sigSlot is missing or zero"
     )]
     MissingSigSlot,
 
-    #[error("signature present (sigFlag=1) but nSigned is 0")]
+    #[error("signature present with sigFlag=1 but nSigned is 0")]
     SignatureNotAllowedByNSigned,
 
     #[error("decryption failed")]
@@ -48,3 +48,4 @@ pub enum MoqSecureError {
     #[error("unknown or not-loaded key_id: {0}")]
     InvalidKeyId(u8),
 }
+
