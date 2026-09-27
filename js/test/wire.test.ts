@@ -80,11 +80,11 @@ function headerFields(headerHex: string) {
     ctr: readU64BE(header, 6),
     nSigned: header[14],
     sigFlag: header[15],
-    encrypted: header[16],
+    encryptionType: header[16],
   };
 }
 
-function storeWithKey() {
+function storeWithKey(): InMemoryKeyStore {
   const store = new InMemoryKeyStore();
 
   store.setKey(
@@ -229,7 +229,7 @@ describe("generated frame vectors", () => {
         fields.ctr,
         fields.nSigned,
         fields.sigFlag === 1,
-        fields.encrypted,
+        fields.encryptionType,
         expected.padLen,
         hex(expected.plaintext),
       );
@@ -261,7 +261,7 @@ describe("generated frame vectors", () => {
       };
 
       const plaintext = await decryptFrame(
-        fields.encrypted === 1
+        fields.encryptionType !== 0
           ? storeWithKey()
           : new InMemoryKeyStore(),
         signed
@@ -348,6 +348,8 @@ describe("AES-256-GCM frames", () => {
     );
 
     const serialized = frame.serialize();
+
+    // Change AES-256-GCM (2) to ChaCha20-Poly1305 (1).
     serialized[16] = 1;
 
     await expect(
