@@ -37,7 +37,7 @@ Publishers are able to use **any** public MoQ CDN, with the hosting provider una
 
 A terminal chat demo using MoQ with end-to-end encryption and Ed25519 message signing via [`moq-secure-chat`](https://github.com/cathode-ray-tube/moq-secure/tree/main/rs/examples/moq-secure-chat).
 
-Install Rust and `moq-relay`, then start a local relay using the example configuration:
+Install Rust and [moq-relay](https://github.com/moq-dev/moq/tree/main/rs/moq-relay), then start a local relay using the example configuration:
 
 ```bash
 wget https://raw.githubusercontent.com/moq-dev/moq/refs/heads/main/demo/relay/localhost.toml
