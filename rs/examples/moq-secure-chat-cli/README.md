@@ -31,7 +31,7 @@ moq-relay localhost.toml
 The example configuration listens at:
 
 ```text
-https://localhost:4443/chat
+https://localhost:4443
 ```
 
 ## Install the CLI
