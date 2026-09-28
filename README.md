@@ -33,64 +33,41 @@ MoQ-Secure is designed to provide:
 
 Publishers are able to use **any** public MoQ CDN, with the hosting provider unable to see the content. Consumers can verify the publisher of the content, wherever they receive it from.
 
-## Quick Start (moq-secure-chat-cli):
+## Quick Start (moq-secure-chat-cli)
 
-[![crates.io version](https://img.shields.io/crates/v/moq-secure-chat-cli.svg)](https://crates.io/crates/moq-secure-chat-cli)
-[![Downloads](https://img.shields.io/crates/d/moq-secure-chat-cli.svg)](https://crates.io/crates/moq-secure-chat-cli)
+A terminal chat demo using MoQ with end-to-end encryption and Ed25519 message signing via [`moq-secure-chat`](https://github.com/cathode-ray-tube/moq-secure/tree/main/rs/examples/moq-secure-chat).
 
-This demonstrates moq-secure end-to-end encryption and signing of text chat messages in the terminal.
-
-### Prerequisites
-
-Rust installed:
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-Install **moq-relay** (the server) from the moq repo, full instructions [here](https://github.com/moq-dev/moq/tree/main/rs/moq-relay).
-
-### Run
-
-Run moq-relay with this config file, [localhost.toml](https://github.com/moq-dev/moq/blob/main/demo/relay/localhost.toml):
+Install Rust and `moq-relay`, then start a local relay using the example configuration:
 
 ```bash
 wget https://raw.githubusercontent.com/moq-dev/moq/refs/heads/main/demo/relay/localhost.toml
 moq-relay localhost.toml
 ```
 
-In a **2nd terminal**, install the binary:
+In another terminal, install and start the publisher:
 
 ```bash
 cargo install moq-secure-chat-cli
+
+moq-secure-chat-cli \
+  --relay https://localhost:4443/chat \
+  --tls-disable-verify \
+  publish
 ```
 
-Run (with your localhost relay):
+The publisher generates the broadcast name and cryptographic keys, then prints a complete subscriber command. Copy that command into a third terminal and run it.
+
+Type messages in the publisher terminal to send encrypted, signed chat messages.
+
+The default encryption algorithm is ChaCha20-Poly1305. AES-256-GCM is also supported with:
 
 ```bash
-moq-secure-chat-cli --relay https://localhost:4443/chat --tls-disable-verify publish
+--encryption aes-256-gcm
 ```
 
-**or** run (with a remote relay, replacing `https://example.com:4443/chat` with the **url**, **port** and **path** of the relay):
+This is a demonstration application. For production use, harden key management, key distribution, authentication, and TLS configuration.
 
-```bash
-moq-secure-chat-cli --relay https://example.com:4443/chat publish
-```
-
-The app will print a copy and paste command to use in a **3rd terminal**, to run the binary in `subscriber` mode.
-
-Messages sent from the **publisher** terminal should be visible in the **subscriber** terminal.
-
-### Troubleshooting
-
-Run binary with `-h` or `--help` flag to list available args and usage:
-
-```bash
-moq-secure-chat-cli --help
-```
-
-### Production
-
-This is a demo app, with usability prioritized. For production, hardening would be required, particularly around key management and distribution.
+See the full [README.md](https://github.com/cathode-ray-tube/moq-secure/blob/main/rs/examples/moq-secure-chat-cli/README.md) for complete usage, configuration options, troubleshooting, and security notes.
 
 ## Quick Start (moq-player):
 
