@@ -3,499 +3,505 @@ import { sha512 } from "@noble/hashes/sha2.js";
 import { concatBytes } from "@noble/hashes/utils.js";
 
 import {
-	AEAD_TAG_LEN,
-	FIXED_HEADER_LEN,
-	MAGIC,
-	SIG_SLOT_LEN,
-	VERSION,
+  AEAD_TAG_LEN,
+  EncryptionType,
+  FIXED_HEADER_LEN,
+  MAGIC,
+  SIG_SLOT_LEN,
+  VERSION,
 } from "./constants.js";
+
 import {
-	aeadDecrypt,
-	aeadEncrypt,
-	sha256Digest,
+  aeadDecrypt,
+  aeadEncrypt,
+  sha256Digest,
 } from "./crypto.js";
+
 import { MoqSecureError } from "./errors.js";
 import type { KeyStore } from "./keys.js";
+
 import {
-	prependZeroPadding,
-	removePadding,
+  prependZeroPadding,
+  removePadding,
 } from "./padding.js";
 
 ed25519.hashes.sha512 = (...messages: Uint8Array[]) => {
-	return sha512(concatBytes(...messages));
+  return sha512(concatBytes(...messages));
 };
 
-export type EncryptionType = 0 | 1 | 2;
-
 function isEncryptionType(
-	value: number,
+  value: number,
 ): value is EncryptionType {
-	return value === 0 || value === 1 || value === 2;
+  return value === EncryptionType.NONE ||
+    value === EncryptionType.CHACHA20_POLY1305 ||
+    value === EncryptionType.AES_256_GCM;
 }
 
 function algorithmForEncryptionType(
-	encryptionType: EncryptionType,
+  encryptionType: EncryptionType,
 ): "CHACHA20-POLY1305" | "AES-256-GCM" | undefined {
-	switch (encryptionType) {
-		case 0:
-			return undefined;
-		case 1:
-			return "CHACHA20-POLY1305";
-		case 2:
-			return "AES-256-GCM";
-	}
+  switch (encryptionType) {
+    case EncryptionType.NONE:
+      return undefined;
+
+    case EncryptionType.CHACHA20_POLY1305:
+      return "CHACHA20-POLY1305";
+
+    case EncryptionType.AES_256_GCM:
+      return "AES-256-GCM";
+  }
 }
 
 function equalBytes(
-	a: Uint8Array,
-	b: Uint8Array,
+  a: Uint8Array,
+  b: Uint8Array,
 ): boolean {
-	return a.length === b.length &&
-		a.every((value, index) => value === b[index]);
+  return a.length === b.length &&
+    a.every((value, index) => value === b[index]);
 }
 
 function concat(...parts: Uint8Array[]): Uint8Array {
-	const result = new Uint8Array(
-		parts.reduce((length, part) => length + part.length, 0),
-	);
+  const result = new Uint8Array(
+    parts.reduce((length, part) => length + part.length, 0),
+  );
 
-	let offset = 0;
+  let offset = 0;
 
-	for (const part of parts) {
-		result.set(part, offset);
-		offset += part.length;
-	}
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.length;
+  }
 
-	return result;
+  return result;
 }
 
 function encodeUint32BE(value: number): Uint8Array {
-	if (
-		!Number.isSafeInteger(value) ||
-		value < 0 ||
-		value > 0xffff_ffff
-	) {
-		throw new RangeError("padLen must be a uint32");
-	}
+  if (
+    !Number.isSafeInteger(value) ||
+    value < 0 ||
+    value > 0xffff_ffff
+  ) {
+    throw new RangeError("padLen must be a uint32");
+  }
 
-	const result = new Uint8Array(4);
-	new DataView(result.buffer).setUint32(0, value, false);
-	return result;
+  const result = new Uint8Array(4);
+  new DataView(result.buffer).setUint32(0, value, false);
+  return result;
 }
 
 export class WireHeader {
-	constructor(
-		public readonly magic: Uint8Array,
-		public readonly version: number,
-		public readonly keyId: number,
-		public readonly ctr: bigint,
-		public readonly nSigned: number,
-		public readonly sigFlag: number,
-		public readonly encryptionType: number,
-	) {}
+  constructor(
+    public readonly magic: Uint8Array,
+    public readonly version: number,
+    public readonly keyId: number,
+    public readonly ctr: bigint,
+    public readonly nSigned: number,
+    public readonly sigFlag: number,
+    public readonly encryptionType: number,
+  ) {}
 
-	encode(): Uint8Array {
-		const result = new Uint8Array(FIXED_HEADER_LEN);
-		let offset = 0;
+  encode(): Uint8Array {
+    const result = new Uint8Array(FIXED_HEADER_LEN);
+    let offset = 0;
 
-		result.set(this.magic, offset);
-		offset += 4;
+    result.set(this.magic, offset);
+    offset += 4;
 
-		result[offset++] = this.version;
-		result[offset++] = this.keyId;
+    result[offset++] = this.version;
+    result[offset++] = this.keyId;
 
-		new DataView(result.buffer).setBigUint64(
-			offset,
-			this.ctr,
-			false,
-		);
-		offset += 8;
+    new DataView(result.buffer).setBigUint64(
+      offset,
+      this.ctr,
+      false,
+    );
+    offset += 8;
 
-		result[offset++] = this.nSigned;
-		result[offset++] = this.sigFlag;
-		result[offset++] = this.encryptionType;
+    result[offset++] = this.nSigned;
+    result[offset++] = this.sigFlag;
+    result[offset++] = this.encryptionType;
 
-		return result;
-	}
+    return result;
+  }
 
-	aad(): Uint8Array {
-		return this.encode();
-	}
+  aad(): Uint8Array {
+    return this.encode();
+  }
 
-	validate(): void {
-		if (!equalBytes(this.magic, MAGIC)) {
-			throw MoqSecureError.invalidMagic();
-		}
+  validate(): void {
+    if (!equalBytes(this.magic, MAGIC)) {
+      throw MoqSecureError.invalidMagic();
+    }
 
-		if (this.version !== VERSION) {
-			throw MoqSecureError.unsupportedVersion(this.version);
-		}
+    if (this.version !== VERSION) {
+      throw MoqSecureError.unsupportedVersion(this.version);
+    }
 
-		if (
-			!Number.isInteger(this.nSigned) ||
-			this.nSigned < 0 ||
-			this.nSigned > 0xff
-		) {
-			throw new MoqSecureError(
-				"InvalidNSigned",
-				`nSigned must be an unsigned byte, got ${this.nSigned}`,
-			);
-		}
+    if (
+      !Number.isInteger(this.nSigned) ||
+      this.nSigned < 0 ||
+      this.nSigned > 0xff
+    ) {
+      throw new MoqSecureError(
+        "InvalidNSigned",
+        `nSigned must be an unsigned byte, got ${this.nSigned}`,
+      );
+    }
 
-		if (this.sigFlag !== 0 && this.sigFlag !== 1) {
-			throw new MoqSecureError(
-				"InvalidSigFlag",
-				`sigFlag must be 0 or 1, got ${this.sigFlag}`,
-			);
-		}
+    if (this.sigFlag !== 0 && this.sigFlag !== 1) {
+      throw new MoqSecureError(
+        "InvalidSigFlag",
+        `sigFlag must be 0 or 1, got ${this.sigFlag}`,
+      );
+    }
 
-		if (!isEncryptionType(this.encryptionType)) {
-			throw MoqSecureError.unsupportedAlgorithm(
-				this.encryptionType,
-			);
-		}
+    if (!isEncryptionType(this.encryptionType)) {
+      throw MoqSecureError.unsupportedAlgorithm(
+        this.encryptionType,
+      );
+    }
 
-		if (this.nSigned === 0 && this.sigFlag !== 0) {
-			throw new MoqSecureError(
-				"SigningMismatch",
-				"signing is disabled but sigFlag indicates a signature",
-			);
-		}
-	}
+    if (this.nSigned === 0 && this.sigFlag !== 0) {
+      throw new MoqSecureError(
+        "SigningMismatch",
+        "signing is disabled but sigFlag indicates a signature",
+      );
+    }
+  }
 }
 
 export interface FrameInit {
-	header: WireHeader;
-	payload: Uint8Array;
-	tag?: Uint8Array;
-	signature?: Uint8Array;
+  header: WireHeader;
+  payload: Uint8Array;
+  tag?: Uint8Array;
+  signature?: Uint8Array;
 }
 
 export class Frame {
-	readonly header: WireHeader;
-	readonly payload: Uint8Array;
-	readonly tag: Uint8Array;
-	readonly signature?: Uint8Array;
+  readonly header: WireHeader;
+  readonly payload: Uint8Array;
+  readonly tag: Uint8Array;
+  readonly signature?: Uint8Array;
 
-	constructor(init: FrameInit) {
-		this.header = init.header;
-		this.payload = init.payload.slice();
-		this.tag = (
-			init.tag ?? new Uint8Array(AEAD_TAG_LEN)
-		).slice();
-		this.signature = init.signature?.slice();
-	}
+  constructor(init: FrameInit) {
+    this.header = init.header;
+    this.payload = init.payload.slice();
+    this.tag = (
+      init.tag ?? new Uint8Array(AEAD_TAG_LEN)
+    ).slice();
+    this.signature = init.signature?.slice();
+  }
 
-	static parse(input: Uint8Array): Frame {
-		if (input.length < FIXED_HEADER_LEN) {
-			throw MoqSecureError.truncated();
-		}
+  static parse(input: Uint8Array): Frame {
+    if (input.length < FIXED_HEADER_LEN) {
+      throw MoqSecureError.truncated();
+    }
 
-		const view = new DataView(
-			input.buffer,
-			input.byteOffset,
-			input.byteLength,
-		);
+    const view = new DataView(
+      input.buffer,
+      input.byteOffset,
+      input.byteLength,
+    );
 
-		const header = new WireHeader(
-			input.slice(0, 4),
-			input[4],
-			input[5],
-			view.getBigUint64(6, false),
-			input[14],
-			input[15],
-			input[16],
-		);
+    const header = new WireHeader(
+      input.slice(0, 4),
+      input[4],
+      input[5],
+      view.getBigUint64(6, false),
+      input[14],
+      input[15],
+      input[16],
+    );
 
-		header.validate();
+    header.validate();
 
-		const signatureLength = header.sigFlag === 1
-			? SIG_SLOT_LEN
-			: 0;
+    const signatureLength = header.sigFlag === 1
+      ? SIG_SLOT_LEN
+      : 0;
 
-		if (input.length < FIXED_HEADER_LEN + signatureLength) {
-			throw MoqSecureError.truncated();
-		}
+    if (input.length < FIXED_HEADER_LEN + signatureLength) {
+      throw MoqSecureError.truncated();
+    }
 
-		const bodyEnd = input.length - signatureLength;
-		const body = input.slice(FIXED_HEADER_LEN, bodyEnd);
+    const bodyEnd = input.length - signatureLength;
+    const body = input.slice(FIXED_HEADER_LEN, bodyEnd);
 
-		let signature: Uint8Array | undefined;
+    let signature: Uint8Array | undefined;
 
-		if (signatureLength > 0) {
-			signature = input.slice(bodyEnd);
+    if (signatureLength > 0) {
+      signature = input.slice(bodyEnd);
 
-			if (signature.length !== SIG_SLOT_LEN) {
-				throw MoqSecureError.truncated();
-			}
+      if (signature.length !== SIG_SLOT_LEN) {
+        throw MoqSecureError.truncated();
+      }
 
-			if (signature.every((byte) => byte === 0)) {
-				throw MoqSecureError.invalidSignature();
-			}
-		}
+      if (signature.every((byte) => byte === 0)) {
+        throw MoqSecureError.invalidSignature();
+      }
+    }
 
-		if (header.encryptionType !== 0) {
-			if (body.length < AEAD_TAG_LEN) {
-				throw new MoqSecureError(
-					"CiphertextTooShort",
-					"ciphertext too short for AEAD tag",
-				);
-			}
+    if (header.encryptionType !== EncryptionType.NONE) {
+      if (body.length < AEAD_TAG_LEN) {
+        throw new MoqSecureError(
+          "CiphertextTooShort",
+          "ciphertext too short for AEAD tag",
+        );
+      }
 
-			const ciphertextEnd = body.length - AEAD_TAG_LEN;
+      const ciphertextEnd = body.length - AEAD_TAG_LEN;
 
-			return new Frame({
-				header,
-				payload: body.slice(0, ciphertextEnd),
-				tag: body.slice(ciphertextEnd),
-				signature,
-			});
-		}
+      return new Frame({
+        header,
+        payload: body.slice(0, ciphertextEnd),
+        tag: body.slice(ciphertextEnd),
+        signature,
+      });
+    }
 
-		return new Frame({
-			header,
-			payload: body,
-			signature,
-		});
-	}
+    return new Frame({
+      header,
+      payload: body,
+      signature,
+    });
+  }
 
-	serialize(): Uint8Array {
-		const body = this.header.encryptionType !== 0
-			? concat(this.payload, this.tag)
-			: this.payload;
+  serialize(): Uint8Array {
+    const body = this.header.encryptionType !== EncryptionType.NONE
+      ? concat(this.payload, this.tag)
+      : this.payload;
 
-		const signature = this.header.sigFlag === 1
-			? this.signature ?? new Uint8Array(SIG_SLOT_LEN)
-			: new Uint8Array();
+    const signature = this.header.sigFlag === 1
+      ? this.signature ?? new Uint8Array(SIG_SLOT_LEN)
+      : new Uint8Array();
 
-		return concat(
-			this.header.encode(),
-			body,
-			signature,
-		);
-	}
+    return concat(
+      this.header.encode(),
+      body,
+      signature,
+    );
+  }
 
-	aadBytes(): Uint8Array {
-		return this.header.aad();
-	}
+  aadBytes(): Uint8Array {
+    return this.header.aad();
+  }
 
-	digestForSignature(): Uint8Array {
-		const body = this.header.encryptionType !== 0
-			? concat(this.payload, this.tag)
-			: this.payload;
+  digestForSignature(): Uint8Array {
+    const body = this.header.encryptionType !== EncryptionType.NONE
+      ? concat(this.payload, this.tag)
+      : this.payload;
 
-		return sha256Digest(
-			concat(this.header.encode(), body),
-		);
-	}
+    return sha256Digest(
+      concat(this.header.encode(), body),
+    );
+  }
 
-	async decodePlaintext(
-		keyStore: KeyStore,
-		broadcasterPublicKey: Uint8Array,
-		lease: { remaining: number },
-	): Promise<Uint8Array> {
-		const signingEnabled = this.header.nSigned > 0;
-		const signed = this.header.sigFlag === 1;
+  async decodePlaintext(
+    keyStore: KeyStore,
+    broadcasterPublicKey: Uint8Array,
+    lease: { remaining: number },
+  ): Promise<Uint8Array> {
+    const signingEnabled = this.header.nSigned > 0;
+    const signed = this.header.sigFlag === 1;
 
-		if (!signingEnabled) {
-			if (this.header.sigFlag !== 0 || this.signature) {
-				throw new MoqSecureError(
-					"SigningMismatch",
-					"signing is disabled but a signature is present",
-				);
-			}
-		} else if (signed) {
-			if (!this.signature) {
-				throw MoqSecureError.invalidSignature();
-			}
+    if (!signingEnabled) {
+      if (this.header.sigFlag !== 0 || this.signature) {
+        throw new MoqSecureError(
+          "SigningMismatch",
+          "signing is disabled but a signature is present",
+        );
+      }
+    } else if (signed) {
+      if (!this.signature) {
+        throw MoqSecureError.invalidSignature();
+      }
 
-			const valid = await ed25519.verify(
-				this.signature,
-				this.digestForSignature(),
-				broadcasterPublicKey,
-			);
+      const valid = await ed25519.verify(
+        this.signature,
+        this.digestForSignature(),
+        broadcasterPublicKey,
+      );
 
-			if (!valid) {
-				throw MoqSecureError.invalidSignature();
-			}
-		} else if (
-			!Number.isSafeInteger(lease.remaining) ||
-			lease.remaining <= 0
-		) {
-			throw MoqSecureError.invalidSignature();
-		}
+      if (!valid) {
+        throw MoqSecureError.invalidSignature();
+      }
+    } else if (
+      !Number.isSafeInteger(lease.remaining) ||
+      lease.remaining <= 0
+    ) {
+      throw MoqSecureError.invalidSignature();
+    }
 
-		let paddedPlaintext: Uint8Array;
+    let paddedPlaintext: Uint8Array;
 
-		if (this.header.encryptionType === 0) {
-			paddedPlaintext = this.payload;
-		} else {
-			const algorithm = algorithmForEncryptionType(
-				this.header.encryptionType as EncryptionType,
-			);
+    if (this.header.encryptionType === EncryptionType.NONE) {
+      paddedPlaintext = this.payload;
+    } else {
+      const algorithm = algorithmForEncryptionType(
+        this.header.encryptionType as EncryptionType,
+      );
 
-			if (!algorithm) {
-				throw MoqSecureError.unsupportedAlgorithm(
-					this.header.encryptionType,
-				);
-			}
+      if (!algorithm) {
+        throw MoqSecureError.unsupportedAlgorithm(
+          this.header.encryptionType,
+        );
+      }
 
-			const key = keyStore.aeadKey(this.header.keyId);
+      const key = keyStore.aeadKey(this.header.keyId);
 
-			if (!key) {
-				throw new MoqSecureError(
-					"InvalidKeyId",
-					`unknown or not-loaded key_id: ${this.header.keyId}`,
-					this.header.keyId,
-				);
-			}
+      if (!key) {
+        throw new MoqSecureError(
+          "InvalidKeyId",
+          `unknown or not-loaded key_id: ${this.header.keyId}`,
+          this.header.keyId,
+        );
+      }
 
-			paddedPlaintext = await aeadDecrypt(
-				algorithm,
-				key,
-				this.header.keyId,
-				this.header.ctr,
-				this.aadBytes(),
-				this.payload,
-				this.tag,
-			);
-		}
+      paddedPlaintext = await aeadDecrypt(
+        algorithm,
+        key,
+        this.header.keyId,
+        this.header.ctr,
+        this.aadBytes(),
+        this.payload,
+        this.tag,
+      );
+    }
 
-		let plaintext: Uint8Array;
+    let plaintext: Uint8Array;
 
-		try {
-			plaintext = removePadding(paddedPlaintext);
-		} catch {
-			throw new MoqSecureError(
-				"InvalidPadLength",
-				"invalid padding length",
-			);
-		}
+    try {
+      plaintext = removePadding(paddedPlaintext);
+    } catch {
+      throw new MoqSecureError(
+        "InvalidPadLength",
+        "invalid padding length",
+      );
+    }
 
-		if (signingEnabled) {
-			if (signed) {
-				lease.remaining = Math.max(
-					this.header.nSigned - 1,
-					0,
-				);
-			} else {
-				lease.remaining--;
-			}
-		}
+    if (signingEnabled) {
+      if (signed) {
+        lease.remaining = Math.max(
+          this.header.nSigned - 1,
+          0,
+        );
+      } else {
+        lease.remaining--;
+      }
+    }
 
-		return plaintext;
-	}
+    return plaintext;
+  }
 }
 
 export async function encryptFrame(
-	keyStore: KeyStore,
-	broadcasterPrivateKey: Uint8Array,
-	keyId: number,
-	ctr: bigint,
-	nSigned: number,
-	maybeSign: boolean,
-	encryptionType: EncryptionType,
-	padLen: number,
-	plaintext: Uint8Array,
+  keyStore: KeyStore,
+  broadcasterPrivateKey: Uint8Array,
+  keyId: number,
+  ctr: bigint,
+  nSigned: number,
+  maybeSign: boolean,
+  encryptionType: EncryptionType,
+  padLen: number,
+  plaintext: Uint8Array,
 ): Promise<Frame> {
-	if (!isEncryptionType(encryptionType)) {
-		throw MoqSecureError.unsupportedAlgorithm(
-			encryptionType,
-		);
-	}
+  if (!isEncryptionType(encryptionType)) {
+    throw MoqSecureError.unsupportedAlgorithm(
+      encryptionType,
+    );
+  }
 
-	const sigFlag = nSigned !== 0 && maybeSign ? 1 : 0;
+  const sigFlag = nSigned !== 0 && maybeSign ? 1 : 0;
 
-	const header = new WireHeader(
-		MAGIC,
-		VERSION,
-		keyId,
-		ctr,
-		nSigned,
-		sigFlag,
-		encryptionType,
-	);
+  const header = new WireHeader(
+    MAGIC,
+    VERSION,
+    keyId,
+    ctr,
+    nSigned,
+    sigFlag,
+    encryptionType,
+  );
 
-	header.validate();
+  header.validate();
 
-	const paddedPlaintext = concat(
-		encodeUint32BE(padLen),
-		prependZeroPadding(plaintext, padLen),
-	);
+  const paddedPlaintext = concat(
+    encodeUint32BE(padLen),
+    prependZeroPadding(plaintext, padLen),
+  );
 
-	let payload: Uint8Array;
-	let tag = new Uint8Array(AEAD_TAG_LEN);
+  let payload: Uint8Array;
+  let tag = new Uint8Array(AEAD_TAG_LEN);
 
-	if (encryptionType === 0) {
-		payload = paddedPlaintext;
-	} else {
-		const algorithm = algorithmForEncryptionType(
-			encryptionType,
-		);
+  if (encryptionType === EncryptionType.NONE) {
+    payload = paddedPlaintext;
+  } else {
+    const algorithm = algorithmForEncryptionType(
+      encryptionType,
+    );
 
-		if (!algorithm) {
-			throw MoqSecureError.unsupportedAlgorithm(
-				encryptionType,
-			);
-		}
+    if (!algorithm) {
+      throw MoqSecureError.unsupportedAlgorithm(
+        encryptionType,
+      );
+    }
 
-		const key = keyStore.aeadKey(keyId);
+    const key = keyStore.aeadKey(keyId);
 
-		if (!key) {
-			throw new MoqSecureError(
-				"InvalidKeyId",
-				`unknown or not-loaded key_id: ${keyId}`,
-				keyId,
-			);
-		}
+    if (!key) {
+      throw new MoqSecureError(
+        "InvalidKeyId",
+        `unknown or not-loaded key_id: ${keyId}`,
+        keyId,
+      );
+    }
 
-		const encryptedResult = await aeadEncrypt(
-			algorithm,
-			key,
-			keyId,
-			ctr,
-			header.aad(),
-			paddedPlaintext,
-		);
+    const encryptedResult = await aeadEncrypt(
+      algorithm,
+      key,
+      keyId,
+      ctr,
+      header.aad(),
+      paddedPlaintext,
+    );
 
-		payload = encryptedResult.ciphertext;
-		tag = encryptedResult.tag;
-	}
+    payload = encryptedResult.ciphertext;
+    tag = encryptedResult.tag;
+  }
 
-	const unsignedFrame = new Frame({
-		header,
-		payload,
-		tag,
-	});
+  const unsignedFrame = new Frame({
+    header,
+    payload,
+    tag,
+  });
 
-	if (sigFlag === 0) {
-		return unsignedFrame;
-	}
+  if (sigFlag === 0) {
+    return unsignedFrame;
+  }
 
-	const signature = await ed25519.sign(
-		unsignedFrame.digestForSignature(),
-		broadcasterPrivateKey,
-	);
+  const signature = await ed25519.sign(
+    unsignedFrame.digestForSignature(),
+    broadcasterPrivateKey,
+  );
 
-	return new Frame({
-		header,
-		payload,
-		tag,
-		signature,
-	});
+  return new Frame({
+    header,
+    payload,
+    tag,
+    signature,
+  });
 }
 
 export async function decryptFrame(
-	keyStore: KeyStore,
-	broadcasterPublicKey: Uint8Array,
-	lease: { remaining: number },
-	frameBytes: Uint8Array,
+  keyStore: KeyStore,
+  broadcasterPublicKey: Uint8Array,
+  lease: { remaining: number },
+  frameBytes: Uint8Array,
 ): Promise<Uint8Array> {
-	const frame = Frame.parse(frameBytes);
+  const frame = Frame.parse(frameBytes);
 
-	return frame.decodePlaintext(
-		keyStore,
-		broadcasterPublicKey,
-		lease,
-	);
+  return frame.decodePlaintext(
+    keyStore,
+    broadcasterPublicKey,
+    lease,
+  );
 }
