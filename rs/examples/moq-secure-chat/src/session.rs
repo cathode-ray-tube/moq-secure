@@ -1,7 +1,9 @@
 use anyhow::Context;
 use ed25519_dalek::VerifyingKey;
 use moq_secure::{
-    wire::{decrypt_frame, encrypt_frame},
+    decrypt_frame,
+    encrypt_frame,
+    EncryptionType,
     InMemoryKeyStore,
 };
 
@@ -19,27 +21,68 @@ impl ChatSession {
 }
 
 /// Publisher publishes each chat message as one MoQ group containing one
-/// frame.
+/// encrypted and signed frame.
 pub struct ChatPublisher {
     pub keys: PublisherKeys,
     pub track: moq_net::track::Producer,
     pub n_signed: u8,
+    pub encryption_type: EncryptionType,
     pub crypto_ctr: u64,
     pub group_ctr: u64,
 }
 
 impl ChatPublisher {
+    /// Creates a publisher using ChaCha20-Poly1305 by default.
     pub fn new(
         track: moq_net::track::Producer,
         keys: PublisherKeys,
     ) -> Self {
+        Self::with_encryption(
+            track,
+            keys,
+            EncryptionType::ChaCha20Poly1305,
+        )
+    }
+
+    /// Creates a publisher using the selected AEAD algorithm.
+    pub fn with_encryption(
+        track: moq_net::track::Producer,
+        keys: PublisherKeys,
+        encryption_type: EncryptionType,
+    ) -> Self {
+        assert!(
+            matches!(
+                encryption_type,
+                EncryptionType::ChaCha20Poly1305
+                    | EncryptionType::Aes256Gcm
+            ),
+            "ChatPublisher requires an encrypted AEAD algorithm"
+        );
+
         Self {
             keys,
             track,
             n_signed: 1,
+            encryption_type,
             crypto_ctr: 0,
             group_ctr: 0,
         }
+    }
+
+    pub fn set_encryption_type(
+        &mut self,
+        encryption_type: EncryptionType,
+    ) {
+        assert!(
+            matches!(
+                encryption_type,
+                EncryptionType::ChaCha20Poly1305
+                    | EncryptionType::Aes256Gcm
+            ),
+            "ChatPublisher requires an encrypted AEAD algorithm"
+        );
+
+        self.encryption_type = encryption_type;
     }
 
     fn keystore(&self) -> InMemoryKeyStore {
@@ -53,10 +96,18 @@ impl ChatPublisher {
         plaintext: &[u8],
     ) -> anyhow::Result<()> {
         let crypto_ctr = self.crypto_ctr;
-        self.crypto_ctr = self.crypto_ctr.wrapping_add(1);
+
+        self.crypto_ctr = self
+            .crypto_ctr
+            .checked_add(1)
+            .context("AEAD counter exhausted; rotate the encryption key")?;
 
         let group_id = self.group_ctr;
-        self.group_ctr = self.group_ctr.wrapping_add(1);
+
+        self.group_ctr = self
+            .group_ctr
+            .checked_add(1)
+            .context("group counter exhausted")?;
 
         let keystore = self.keystore();
 
@@ -67,7 +118,7 @@ impl ChatPublisher {
             crypto_ctr,
             self.n_signed,
             true,
-            1,
+            self.encryption_type.into(),
             0,
             plaintext,
         )
@@ -93,7 +144,7 @@ impl ChatPublisher {
 }
 
 /// Subscriber receives chat frames, verifies their signatures, and decrypts
-/// them. It has no private signing key.
+/// them. The algorithm is selected from each frame's wire header.
 pub struct ChatSubscriber {
     pub verify_key: VerifyingKey,
     pub keys: SubscriberKeys,
