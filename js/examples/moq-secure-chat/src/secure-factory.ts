@@ -10,6 +10,10 @@ import {
   InMemoryKeyStore,
 } from "../../../src/keys.js";
 
+import {
+  EncryptionType,
+} from "../../../src/constants.js";
+
 import * as ed25519 from "@noble/ed25519";
 
 import type { Identity } from "./types.ts";
@@ -65,6 +69,7 @@ export const secureFactory: SecureFactory = {
     identity: Identity,
   ): Promise<SecureChatCodec> {
     const keyStore = new InMemoryKeyStore();
+
     keyStore.setKey(0, identity.encryptionKey);
 
     const encrypter = new MoqSecureEncrypter({
@@ -73,6 +78,7 @@ export const secureFactory: SecureFactory = {
       keyId: 0,
       nSigned: 1,
       maybeSign: true,
+      encryptionType: EncryptionType.AES_256_GCM,
       padLen: 0,
     });
 
@@ -84,6 +90,7 @@ export const secureFactory: SecureFactory = {
     broadcasterPublicKey: Uint8Array,
   ): Promise<SecureChatCodec> {
     const keyStore = new InMemoryKeyStore();
+
     keyStore.setKey(0, encryptionKey);
 
     const decrypter = new MoqSecureDecrypter({
