@@ -80,7 +80,7 @@ Encryption: chacha20-poly1305
 Type lines on stdin; press Ctrl+C to quit.
 ```
 
-Copy and run the displayed subscriber command in a third terminal.
+Copy and run the displayed subscriber command in another terminal.
 
 Type messages into the publisher terminal. Verified and decrypted messages will appear in the subscriber terminal with a timestamp:
 
