@@ -1,3 +1,9 @@
+import * as ed25519 from "@noble/ed25519";
+
+import {
+  EncryptionType,
+} from "../../../src/constants.js";
+
 import {
   MoqSecureDecrypter,
 } from "../../../src/decrypter.js";
@@ -9,12 +15,6 @@ import {
 import {
   InMemoryKeyStore,
 } from "../../../src/keys.js";
-
-import {
-  EncryptionType,
-} from "../../../src/constants.js";
-
-import * as ed25519 from "@noble/ed25519";
 
 import type { Identity } from "./types.ts";
 import { SecureChatCodec } from "./secure-chat.ts";
@@ -76,9 +76,8 @@ export const secureFactory: SecureFactory = {
       keyStore,
       signingPrivateKey: identity.signingPrivateKey,
       keyId: 0,
-      nSigned: 1,
-      maybeSign: true,
       encryptionType: EncryptionType.AES_256_GCM,
+      nSigned: 1,
       padLen: 0,
     });
 
@@ -98,6 +97,9 @@ export const secureFactory: SecureFactory = {
       broadcasterPublicKey,
     });
 
-    return new SecureChatCodec(undefined, decrypter);
+    return new SecureChatCodec(
+      undefined,
+      decrypter,
+    );
   },
 };
