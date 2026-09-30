@@ -17,7 +17,6 @@ pub const AEAD_TAG_LEN: usize = 16;
 
 #[allow(dead_code)]
 pub(crate) const ENCRYPTION_UNENCRYPTED: u8 = 0;
-
 pub(crate) const ENCRYPTION_CHACHA20_POLY1305: u8 = 1;
 pub(crate) const ENCRYPTION_AES_256_GCM: u8 = 2;
 
