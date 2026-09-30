@@ -1,4 +1,5 @@
 use base64::Engine;
+#[allow(unused_imports)]
 use zeroize::{Zeroize, Zeroizing};
 
 pub trait KeyStore: Send + Sync {
