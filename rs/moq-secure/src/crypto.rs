@@ -5,11 +5,7 @@ use aes_gcm::{
     Aes256Gcm,
 };
 use chacha20poly1305::{
-    aead::{
-        Aead as ChaChaAead,
-        KeyInit as ChaChaKeyInit,
-        Payload as ChaChaPayload,
-    },
+    aead::Payload as ChaChaPayload,
     ChaCha20Poly1305,
 };
 use sha2::{Digest, Sha256};
