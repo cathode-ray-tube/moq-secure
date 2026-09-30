@@ -11,7 +11,7 @@ const MOQ_BROADCAST: &str = "bbb.hang";
 
 // Positive value delays audio.
 // Negative value advances audio.
-const AUDIO_TS_OFFSET_NS: i64 = -200_000_000;
+const AUDIO_TS_OFFSET_NS: i64 = -70_000_000;
 
 struct Player {
     pipeline: gst::Pipeline,
