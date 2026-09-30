@@ -1,9 +1,15 @@
+use std::convert::TryFrom;
+
 use aes_gcm::{
     aead::{Aead, KeyInit, Payload},
     Aes256Gcm,
 };
 use chacha20poly1305::{
-    aead::{Aead as ChaChaAead, KeyInit as ChaChaKeyInit, Payload as ChaChaPayload},
+    aead::{
+        Aead as ChaChaAead,
+        KeyInit as ChaChaKeyInit,
+        Payload as ChaChaPayload,
+    },
     ChaCha20Poly1305,
 };
 use sha2::{Digest, Sha256};
@@ -13,7 +19,9 @@ use crate::MoqSecureError;
 
 pub const AEAD_TAG_LEN: usize = 16;
 
+#[allow(dead_code)]
 pub(crate) const ENCRYPTION_UNENCRYPTED: u8 = 0;
+
 pub(crate) const ENCRYPTION_CHACHA20_POLY1305: u8 = 1;
 pub(crate) const ENCRYPTION_AES_256_GCM: u8 = 2;
 
@@ -21,9 +29,7 @@ pub(crate) fn sha256_digest(data: &[u8]) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(data);
 
-    hasher
-        .finalize()
-        .into()
+    hasher.finalize().into()
 }
 
 fn split_ciphertext_and_tag(
@@ -64,11 +70,12 @@ fn encrypt_chacha20_poly1305(
         .expect("ChaCha20-Poly1305 key must be 32 bytes");
 
     let nonce_bytes = derive_nonce12(key_id, ctr);
-    let nonce = chacha20poly1305::Nonce::from_slice(&nonce_bytes);
+    let nonce = chacha20poly1305::Nonce::try_from(nonce_bytes.as_slice())
+        .expect("ChaCha20-Poly1305 nonce must be 12 bytes");
 
     let combined = cipher
         .encrypt(
-            nonce,
+            &nonce,
             ChaChaPayload {
                 msg: plaintext,
                 aad,
@@ -90,11 +97,12 @@ fn encrypt_aes256_gcm(
         .expect("AES-256-GCM key must be 32 bytes");
 
     let nonce_bytes = derive_nonce12(key_id, ctr);
-    let nonce = aes_gcm::Nonce::from_slice(&nonce_bytes);
+    let nonce = aes_gcm::Nonce::try_from(nonce_bytes.as_slice())
+        .expect("AES-256-GCM nonce must be 12 bytes");
 
     let combined = cipher
         .encrypt(
-            nonce,
+            &nonce,
             Payload {
                 msg: plaintext,
                 aad,
@@ -105,7 +113,7 @@ fn encrypt_aes256_gcm(
     split_ciphertext_and_tag(&combined)
 }
 
-/// Encrypt according to the wire-level encryption_type:
+/// Encrypt according to the wire-level encryption type:
 ///
 /// 1 = ChaCha20-Poly1305
 /// 2 = AES-256-GCM
@@ -150,13 +158,14 @@ fn decrypt_chacha20_poly1305(
         .expect("ChaCha20-Poly1305 key must be 32 bytes");
 
     let nonce_bytes = derive_nonce12(key_id, ctr);
-    let nonce = chacha20poly1305::Nonce::from_slice(&nonce_bytes);
+    let nonce = chacha20poly1305::Nonce::try_from(nonce_bytes.as_slice())
+        .expect("ChaCha20-Poly1305 nonce must be 12 bytes");
 
     let combined = combine_ciphertext_and_tag(ciphertext, tag);
 
     cipher
         .decrypt(
-            nonce,
+            &nonce,
             ChaChaPayload {
                 msg: &combined,
                 aad,
@@ -177,13 +186,14 @@ fn decrypt_aes256_gcm(
         .expect("AES-256-GCM key must be 32 bytes");
 
     let nonce_bytes = derive_nonce12(key_id, ctr);
-    let nonce = aes_gcm::Nonce::from_slice(&nonce_bytes);
+    let nonce = aes_gcm::Nonce::try_from(nonce_bytes.as_slice())
+        .expect("AES-256-GCM nonce must be 12 bytes");
 
     let combined = combine_ciphertext_and_tag(ciphertext, tag);
 
     cipher
         .decrypt(
-            nonce,
+            &nonce,
             Payload {
                 msg: &combined,
                 aad,
@@ -192,7 +202,7 @@ fn decrypt_aes256_gcm(
         .map_err(|_| MoqSecureError::AeadAuthFailed)
 }
 
-/// Decrypt according to the wire-level encryption_type:
+/// Decrypt according to the wire-level encryption type:
 ///
 /// 1 = ChaCha20-Poly1305
 /// 2 = AES-256-GCM
