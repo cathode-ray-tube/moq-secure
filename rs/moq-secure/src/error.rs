@@ -47,5 +47,8 @@ pub enum MoqSecureError {
 
     #[error("unknown or not-loaded key_id: {0}")]
     InvalidKeyId(u8),
+
+    #[error("replay detected, ctr lower than previous high watermark")]
+    ReplayDetected,
 }
 
