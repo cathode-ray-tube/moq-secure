@@ -37,7 +37,7 @@ impl Player {
 
         // Decouples the MoQ source/parser from the video decoder.
         let video_queue = gst::ElementFactory::make("queue")
-            .property("max-size-time", 200_000_000u64)
+            .property("max-size-time", 300_000_000u64)
             .property("max-size-buffers", 0u32)
             .property("max-size-bytes", 0u32)
             .build()?;
@@ -48,7 +48,7 @@ impl Player {
 
         // Decouples decoding from conversion and GTK rendering.
         let decoded_video_queue = gst::ElementFactory::make("queue")
-            .property("max-size-time", 200_000_000u64)
+            .property("max-size-time", 300_000_000u64)
             .property("max-size-buffers", 0u32)
             .property("max-size-bytes", 0u32)
             .build()?;
