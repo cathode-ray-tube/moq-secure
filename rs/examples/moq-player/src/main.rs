@@ -37,7 +37,7 @@ impl Player {
 
         // Decouples the MoQ source/parser from the video decoder.
         let video_queue = gst::ElementFactory::make("queue")
-            .property("max-size-time", 500_000_000u64)
+            .property("max-size-time", 200_000_000u64)
             .property("max-size-buffers", 0u32)
             .property("max-size-bytes", 0u32)
             .build()?;
@@ -48,7 +48,7 @@ impl Player {
 
         // Decouples decoding from conversion and GTK rendering.
         let decoded_video_queue = gst::ElementFactory::make("queue")
-            .property("max-size-time", 500_000_000u64)
+            .property("max-size-time", 200_000_000u64)
             .property("max-size-buffers", 0u32)
             .property("max-size-bytes", 0u32)
             .build()?;
@@ -60,8 +60,8 @@ impl Player {
         // Set sync=false while diagnosing live-stream timestamp problems.
         // Once playback is stable, try changing both sync properties to true.
         let video_sink = gst::ElementFactory::make("gtk4paintablesink")
-            .property("sync", false)
-            .property("async", false)
+            .property("sync", true)
+            .property("async", true)
             .build()
             .map_err(|e| format!("Could not create gtk4paintablesink: {e}"))?;
 
