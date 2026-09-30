@@ -11,7 +11,7 @@ const MOQ_BROADCAST: &str = "bbb.hang";
 
 // Positive value delays audio.
 // Negative value advances audio.
-const AUDIO_TS_OFFSET_NS: i64 = -300_000_000;
+const AUDIO_TS_OFFSET_NS: i64 = 0;
 
 struct Player {
     pipeline: gst::Pipeline,
@@ -74,7 +74,7 @@ impl Player {
         let audio_decoder = gst::ElementFactory::make("decodebin3").build()?;
 
         let audio_queue = gst::ElementFactory::make("queue")
-            .property("max-size-time", 500_000_000u64)
+            .property("max-size-time", 300_000_000u64)
             .property("max-size-buffers", 0u32)
             .property("max-size-bytes", 0u32)
             .build()?;
