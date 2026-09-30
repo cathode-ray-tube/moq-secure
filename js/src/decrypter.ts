@@ -1,4 +1,4 @@
-import { decryptFrame, parseFrame } from "./wire.js";
+import { decryptFrame, Frame } from "./wire.js";
 import type { AeadAlgorithm } from "./crypto.js";
 import type { KeyStore } from "./keys.js";
 
@@ -200,7 +200,7 @@ export class MoqSecureDecrypter implements FrameDecrypter {
 			 * Parse the unencrypted frame header first so replay state can
 			 * be checked before decryption.
 			 */
-			const frame = parseFrame(ciphertext);
+			const frame = Frame.parse(ciphertext);
 			const keyId = frame.header.keyId;
 			const ctr = BigInt(frame.header.ctr);
 
