@@ -1,4 +1,4 @@
-import { decryptFrame } from "./wire.js";
+import { decryptFrame, parseFrame } from "./wire.js";
 import type { AeadAlgorithm } from "./crypto.js";
 import type { KeyStore } from "./keys.js";
 
@@ -22,11 +22,25 @@ export interface MoqSecureDecrypterProps {
 	algorithm: AeadAlgorithm;
 }
 
+export type PlaybackMode = "live" | "rewind";
+
+interface CounterState {
+	/**
+	 * Highest counter accepted while in live mode.
+	 */
+	liveMaxCtr?: bigint;
+
+	/**
+	 * Highest counter accepted during the current rewind invocation.
+	 */
+	playbackCtr?: bigint;
+}
+
 /**
  * Decrypts and verifies each moq-secure frame.
  *
- * Decryption is serialized so that lease updates cannot race when multiple
- * frames are submitted concurrently.
+ * Decryption is serialized so that lease updates and replay state cannot
+ * race when multiple frames are submitted concurrently.
  */
 export class MoqSecureDecrypter implements FrameDecrypter {
 	readonly keyStore: KeyStore;
@@ -34,10 +48,16 @@ export class MoqSecureDecrypter implements FrameDecrypter {
 	readonly algorithm: AeadAlgorithm;
 
 	#leaseRemaining = 0;
+	#mode: PlaybackMode = "live";
+
+	/*
+	 * Replay state is tracked independently for each encryption key ID.
+	 */
+	#counters = new Map<number, CounterState>();
 
 	/*
 	 * Each decrypt() call waits for the previous call to finish before
-	 * reading or updating #leaseRemaining.
+	 * reading or updating lease and replay state.
 	 */
 	#decryptTail: Promise<void> = Promise.resolve();
 
@@ -72,6 +92,32 @@ export class MoqSecureDecrypter implements FrameDecrypter {
 		this.#leaseRemaining = 0;
 	}
 
+	playbackMode(): PlaybackMode {
+		return this.#mode;
+	}
+
+	/**
+	 * Signals that the player has entered live playback.
+	 *
+	 * Live counter maxima are retained.
+	 */
+	beginLive(): void {
+		this.#mode = "live";
+	}
+
+	/**
+	 * Signals the beginning of a new rewind invocation.
+	 *
+	 * The rewind playback cursor is reset for every encryption key.
+	 */
+	beginRewind(): void {
+		this.#mode = "rewind";
+
+		for (const state of this.#counters.values()) {
+			delete state.playbackCtr;
+		}
+	}
+
 	#setLease(value: number): void {
 		if (
 			!Number.isInteger(value) ||
@@ -84,6 +130,47 @@ export class MoqSecureDecrypter implements FrameDecrypter {
 		}
 
 		this.#leaseRemaining = value;
+	}
+
+	#checkCounter(keyId: number, ctr: bigint): void {
+		const state = this.#counters.get(keyId);
+
+		if (state === undefined) {
+			return;
+		}
+
+		const replayed =
+			this.#mode === "live"
+				? state.liveMaxCtr !== undefined &&
+					ctr <= state.liveMaxCtr
+				: state.playbackCtr !== undefined &&
+					ctr <= state.playbackCtr;
+
+		if (replayed) {
+			throw new Error(
+				"replay detected, ctr lower than previous high watermark",
+			);
+		}
+	}
+
+	#recordCounter(keyId: number, ctr: bigint): void {
+		let state = this.#counters.get(keyId);
+
+		if (state === undefined) {
+			state = {};
+			this.#counters.set(keyId, state);
+		}
+
+		if (this.#mode === "live") {
+			if (
+				state.liveMaxCtr === undefined ||
+				ctr > state.liveMaxCtr
+			) {
+				state.liveMaxCtr = ctr;
+			}
+		} else {
+			state.playbackCtr = ctr;
+		}
 	}
 
 	async decrypt(
@@ -110,6 +197,19 @@ export class MoqSecureDecrypter implements FrameDecrypter {
 
 		try {
 			/*
+			 * Parse the unencrypted frame header first so replay state can
+			 * be checked before decryption.
+			 */
+			const frame = parseFrame(ciphertext);
+			const keyId = frame.header.keyId;
+			const ctr = BigInt(frame.header.ctr);
+
+			/*
+			 * Do not modify replay state during this check.
+			 */
+			this.#checkCounter(keyId, ctr);
+
+			/*
 			 * Use a local lease object. decryptFrame() updates this object
 			 * only after the frame has been fully authenticated, decrypted,
 			 * and padding-validated.
@@ -127,13 +227,10 @@ export class MoqSecureDecrypter implements FrameDecrypter {
 			);
 
 			/*
-			 * Commit the lease only after decryptFrame() succeeds.
-			 *
-			 * If signature verification, AEAD authentication, or padding
-			 * validation fails, decryptFrame() throws and this assignment is
-			 * skipped. The previous lease is therefore preserved.
+			 * Commit the lease and counter only after successful decryption.
 			 */
 			this.#leaseRemaining = lease.remaining;
+			this.#recordCounter(keyId, ctr);
 
 			return plaintext;
 		} finally {
