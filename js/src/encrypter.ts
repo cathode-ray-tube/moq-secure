@@ -8,14 +8,8 @@ const MAX_U64 = 0xffff_ffff_ffff_ffffn;
 export interface FrameEncrypter {
   /**
    * Encrypts one complete application payload.
-   *
-   * The sequence number is retained for compatibility with
-   * media-frame encrypters. moq-secure uses its own counter.
    */
-  encrypt(
-    sequenceNumber: bigint | number,
-    plaintext: Uint8Array,
-  ): Promise<Uint8Array>;
+  encrypt(plaintext: Uint8Array): Promise<Uint8Array>;
 }
 
 export interface MoqSecureEncrypterProps {
@@ -133,10 +127,7 @@ export class MoqSecureEncrypter implements FrameEncrypter {
     return this.#frameCount % this.nSigned === 0;
   }
 
-  async encrypt(
-    _sequenceNumber: bigint | number,
-    plaintext: Uint8Array,
-  ): Promise<Uint8Array> {
+  async encrypt(plaintext: Uint8Array): Promise<Uint8Array> {
     const ctr = this.#takeCounter();
     const shouldSign = this.#shouldSign();
 
