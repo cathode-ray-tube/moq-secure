@@ -10,10 +10,7 @@ export interface FrameDecrypter {
 	 *
 	 *   timestamp varint || codec payload
 	 */
-	decrypt(
-		sequenceNumber: bigint | number,
-		ciphertext: Uint8Array,
-	): Promise<Uint8Array>;
+	decrypt(ciphertext: Uint8Array): Promise<Uint8Array>;
 }
 
 export interface MoqSecureDecrypterProps {
@@ -173,10 +170,7 @@ export class MoqSecureDecrypter implements FrameDecrypter {
 		}
 	}
 
-	async decrypt(
-		_sequenceNumber: bigint | number,
-		ciphertext: Uint8Array,
-	): Promise<Uint8Array> {
+	async decrypt(ciphertext: Uint8Array): Promise<Uint8Array> {
 		let releaseTurn!: () => void;
 
 		const currentTurn = new Promise<void>((resolve) => {
