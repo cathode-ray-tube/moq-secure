@@ -1,14 +1,12 @@
 import * as Moq from "@moq/net";
-console.log(Object.keys(Moq));
+
 import { SecureChatCodec } from "./secure-chat.ts";
 import type { ChatMessage } from "./types.ts";
 
 const CHAT_TRACK = "messages";
 
-type Producer = Moq.Origin.Producer;
-
-type Broadcast = ReturnType<Producer["createBroadcast"]>;
-type Track = ReturnType<Broadcast["createTrack"]>;
+type Broadcast = Moq.Broadcast.Producer;
+type Track = Moq.Track.Producer;
 type Group = ReturnType<Track["appendGroup"]>;
 
 type Connection = Awaited<
@@ -22,8 +20,6 @@ type Consumer = ReturnType<
 >["subscribe"];
 
 export class MoqChatPublisher {
-  readonly #origin: Producer = new Moq.Origin.Producer();
-
   readonly #broadcast: Broadcast;
 
   readonly #track: Track;
@@ -37,7 +33,7 @@ export class MoqChatPublisher {
     private readonly broadcastName: string,
     private readonly codec: SecureChatCodec,
   ) {
-    this.#broadcast = this.#origin.createBroadcast(
+    this.#broadcast = new Moq.Broadcast.Producer(
       Moq.Path.from(this.broadcastName),
     );
 
@@ -47,12 +43,10 @@ export class MoqChatPublisher {
   }
 
   async connect(): Promise<void> {
-    this.#connection = await Moq.Connection.connect(
-      new URL(this.relayUrl),
-      {
-        publish: this.#origin.consume(),
-      },
-    );
+    this.#connection = await Moq.Connection.connect({
+      url: new URL(this.relayUrl),
+      publish: this.#broadcast.consume(),
+    });
 
     this.#broadcast.announce();
   }
@@ -75,6 +69,7 @@ export class MoqChatPublisher {
 
   close(): void {
     this.#group?.close();
+    this.#broadcast.close();
     this.#connection?.close();
   }
 }
@@ -94,9 +89,9 @@ export class MoqChatSubscription {
   ) {}
 
   async connect(): Promise<void> {
-    this.#connection = await Moq.Connection.connect(
-      new URL(this.relayUrl),
-    );
+    this.#connection = await Moq.Connection.connect({
+      url: new URL(this.relayUrl),
+    });
 
     const consumer = this.#connection
       .consume(Moq.Path.from(this.broadcastName))
@@ -137,10 +132,10 @@ export class MoqChatSubscription {
           this.#seen.add(message.messageId);
           this.onMessage(message);
         } catch (error) {
-          if (error instanceof Moq.StreamError) {
+          if (error instanceof Moq.RemoteError) {
             console.warn(
               "Chat group reset:",
-              error.code,
+              error,
             );
 
             break;
@@ -161,4 +156,3 @@ export class MoqChatSubscription {
     this.#connection?.close();
   }
 }
-
