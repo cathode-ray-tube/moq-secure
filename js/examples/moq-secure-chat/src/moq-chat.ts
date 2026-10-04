@@ -28,13 +28,27 @@ function parseRelayUrl(relayUrl: string): URL {
     );
   }
 
+  let url: URL;
+
   try {
-    return new URL(value);
+    url = new URL(value);
   } catch {
     throw new Error(
       `Invalid MoQ relay URL: "${relayUrl}"`,
     );
   }
+
+  if (
+    url.protocol !== "http:" &&
+    url.protocol !== "https:"
+  ) {
+    throw new Error(
+      `Invalid relay URL protocol "${url.protocol}". ` +
+        "Use http:// or https://.",
+    );
+  }
+
+  return url;
 }
 
 export class MoqChatPublisher {
@@ -63,6 +77,11 @@ export class MoqChatPublisher {
   async connect(): Promise<void> {
     const relayUrl = parseRelayUrl(this.relayUrl);
 
+    console.log(
+      "Connecting to MoQ relay:",
+      relayUrl.href,
+    );
+
     this.#connection = await Moq.Connection.connect(
       relayUrl,
       {
@@ -70,7 +89,7 @@ export class MoqChatPublisher {
       },
     );
 
-    this.#broadcast.announce();
+    console.log("Connected to MoQ relay");
   }
 
   async send(message: ChatMessage): Promise<void> {
@@ -93,6 +112,9 @@ export class MoqChatPublisher {
     this.#group?.close();
     this.#broadcast.close();
     this.#connection?.close();
+
+    this.#group = undefined;
+    this.#connection = undefined;
   }
 }
 
@@ -113,6 +135,11 @@ export class MoqChatSubscription {
   async connect(): Promise<void> {
     const relayUrl = parseRelayUrl(this.relayUrl);
 
+    console.log(
+      "Connecting to MoQ relay:",
+      relayUrl.href,
+    );
+
     this.#connection = await Moq.Connection.connect(
       relayUrl,
     );
@@ -123,6 +150,8 @@ export class MoqChatSubscription {
       .subscribe({
         priority: 0,
       });
+
+    console.log("Connected to MoQ relay");
 
     void this.readLoop(subscription);
   }
@@ -166,7 +195,7 @@ export class MoqChatSubscription {
           }
 
           console.error(
-            "Unable to decrypt chat message",
+            "Unable to decrypt chat message:",
             error,
           );
 
@@ -178,6 +207,6 @@ export class MoqChatSubscription {
 
   close(): void {
     this.#connection?.close();
+    this.#connection = undefined;
   }
 }
-
