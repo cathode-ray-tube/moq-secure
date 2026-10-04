@@ -1,31 +1,36 @@
 import * as Moq from "@moq/net";
-import { Producer } from "@moq/net";
 
 import { SecureChatCodec } from "./secure-chat.ts";
 import type { ChatMessage } from "./types.ts";
 
 const CHAT_TRACK = "messages";
 
+type Producer = Moq.Origin.Producer;
+
+type Broadcast = ReturnType<Producer["createBroadcast"]>;
+type Track = ReturnType<Broadcast["createTrack"]>;
+type Group = ReturnType<Track["appendGroup"]>;
+
+type Connection = Awaited<
+  ReturnType<typeof Moq.Connection.connect>
+>;
+
+type Consumer = ReturnType<
+  ReturnType<
+    Connection["consume"]
+  >["track"]
+>["subscribe"];
+
 export class MoqChatPublisher {
-  readonly #origin = new Producer();
+  readonly #origin: Producer = new Moq.Origin.Producer();
 
-  readonly #broadcast: ReturnType<
-    Producer["createBroadcast"]
-  >;
+  readonly #broadcast: Broadcast;
 
-  readonly #track: ReturnType<
-    ReturnType<Producer["createBroadcast"]>["createTrack"]
-  >;
+  readonly #track: Track;
 
-  #connection?: Awaited<
-    ReturnType<typeof Moq.Connection.connect>
-  >;
+  #connection?: Connection;
 
-  #group?: ReturnType<
-    ReturnType<
-      ReturnType<Producer["createBroadcast"]>["createTrack"]
-    >["appendGroup"]
-  >;
+  #group?: Group;
 
   constructor(
     private readonly relayUrl: string,
@@ -77,9 +82,7 @@ export class MoqChatPublisher {
 export class MoqChatSubscription {
   readonly #seen = new Set<string>();
 
-  #connection?: Awaited<
-    ReturnType<typeof Moq.Connection.connect>
-  >;
+  #connection?: Connection;
 
   constructor(
     private readonly relayUrl: string,
@@ -106,13 +109,7 @@ export class MoqChatSubscription {
   }
 
   private async readLoop(
-    consumer: ReturnType<
-      ReturnType<
-        Awaited<
-          ReturnType<typeof Moq.Connection.connect>
-        >["consume"]
-      >["track"]
-    >["subscribe"],
+    consumer: Consumer,
   ): Promise<void> {
     for (;;) {
       const group = await consumer.recvGroup();
@@ -145,6 +142,7 @@ export class MoqChatSubscription {
               "Chat group reset:",
               error.code,
             );
+
             break;
           }
 
@@ -152,6 +150,7 @@ export class MoqChatSubscription {
             "Unable to decrypt chat message",
             error,
           );
+
           break;
         }
       }
@@ -162,3 +161,4 @@ export class MoqChatSubscription {
     this.#connection?.close();
   }
 }
+
