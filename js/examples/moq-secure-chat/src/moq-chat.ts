@@ -1,5 +1,5 @@
 import * as Moq from "@moq/net";
-
+console.log(Object.keys(Moq));
 import { SecureChatCodec } from "./secure-chat.ts";
 import type { ChatMessage } from "./types.ts";
 
