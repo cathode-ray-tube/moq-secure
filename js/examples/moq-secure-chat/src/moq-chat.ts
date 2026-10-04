@@ -58,21 +58,50 @@ export class MoqChatPublisher {
   readonly #broadcast: Broadcast;
   readonly #track: Track;
 
+  readonly #relayUrl: string;
+  readonly #broadcastName: string;
+  readonly #codec: SecureChatCodec;
+
   #connection?: Connection;
   #group?: Group;
   #closed = false;
 
+  // Existing form:
+  // new MoqChatPublisher(relayUrl, broadcastName, codec)
   constructor(
-    private readonly broadcastName: string,
-    private readonly codec: SecureChatCodec,
-    private readonly relayUrl = DEFAULT_RELAY_URL,
+    relayUrl: string,
+    broadcastName: string,
+    codec: SecureChatCodec,
+  );
+
+  // Default-relay form:
+  // new MoqChatPublisher(broadcastName, codec)
+  constructor(
+    broadcastName: string,
+    codec: SecureChatCodec,
+  );
+
+  constructor(
+    relayOrBroadcast: string,
+    broadcastOrCodec: string | SecureChatCodec,
+    maybeCodec?: SecureChatCodec,
   ) {
-    const broadcastPath = Moq.Path.from(
-      this.broadcastName,
-    );
+    if (
+      typeof broadcastOrCodec === "string" &&
+      maybeCodec
+    ) {
+      this.#relayUrl = relayOrBroadcast;
+      this.#broadcastName = broadcastOrCodec;
+      this.#codec = maybeCodec;
+    } else {
+      this.#relayUrl = DEFAULT_RELAY_URL;
+      this.#broadcastName = relayOrBroadcast;
+      this.#codec =
+        broadcastOrCodec as SecureChatCodec;
+    }
 
     this.#broadcast = new Moq.Broadcast.Producer(
-      broadcastPath,
+      Moq.Path.from(this.#broadcastName),
     );
 
     this.#track = this.#broadcast.createTrack(
@@ -89,7 +118,7 @@ export class MoqChatPublisher {
       return;
     }
 
-    const relayUrl = parseRelayUrl(this.relayUrl);
+    const relayUrl = parseRelayUrl(this.#relayUrl);
 
     console.log(
       "Connecting to MoQ relay:",
@@ -111,7 +140,7 @@ export class MoqChatPublisher {
     this.#connection = connection;
 
     console.log("Connected to MoQ relay", {
-      broadcast: this.broadcastName,
+      broadcast: this.#broadcastName,
       track: CHAT_TRACK,
     });
   }
@@ -125,7 +154,9 @@ export class MoqChatPublisher {
       throw new Error("Publisher is not connected");
     }
 
-    const payload = await this.codec.encrypt(message);
+    const payload = await this.#codec.encrypt(
+      message,
+    );
 
     if (!this.#group) {
       this.#group = this.#track.appendGroup();
@@ -156,17 +187,73 @@ export class MoqChatPublisher {
 export class MoqChatSubscription {
   readonly #seen = new Set<string>();
 
+  readonly #relayUrl: string;
+  readonly #broadcastName: string;
+  readonly #codec: SecureChatCodec;
+  readonly #onMessage: (
+    message: ChatMessage,
+  ) => void;
+
   #connection?: Connection;
   #closed = false;
 
+  // Existing form:
+  // new MoqChatSubscription(
+  //   relayUrl,
+  //   broadcastName,
+  //   codec,
+  //   onMessage,
+  // )
   constructor(
-    private readonly broadcastName: string,
-    private readonly codec: SecureChatCodec,
-    private readonly onMessage: (
+    relayUrl: string,
+    broadcastName: string,
+    codec: SecureChatCodec,
+    onMessage: (message: ChatMessage) => void,
+  );
+
+  // Default-relay form:
+  // new MoqChatSubscription(
+  //   broadcastName,
+  //   codec,
+  //   onMessage,
+  // )
+  constructor(
+    broadcastName: string,
+    codec: SecureChatCodec,
+    onMessage: (message: ChatMessage) => void,
+  );
+
+  constructor(
+    relayOrBroadcast: string,
+    broadcastOrCodec: string | SecureChatCodec,
+    codecOrOnMessage:
+      | SecureChatCodec
+      | ((message: ChatMessage) => void),
+    maybeOnMessage?: (
       message: ChatMessage,
     ) => void,
-    private readonly relayUrl = DEFAULT_RELAY_URL,
-  ) {}
+  ) {
+    if (
+      typeof broadcastOrCodec === "string" &&
+      typeof codecOrOnMessage !== "function" &&
+      maybeOnMessage
+    ) {
+      this.#relayUrl = relayOrBroadcast;
+      this.#broadcastName = broadcastOrCodec;
+      this.#codec =
+        codecOrOnMessage as SecureChatCodec;
+      this.#onMessage = maybeOnMessage;
+    } else {
+      this.#relayUrl = DEFAULT_RELAY_URL;
+      this.#broadcastName = relayOrBroadcast;
+      this.#codec =
+        broadcastOrCodec as SecureChatCodec;
+      this.#onMessage =
+        codecOrOnMessage as (
+          message: ChatMessage,
+        ) => void;
+    }
+  }
 
   async connect(): Promise<void> {
     if (this.#closed) {
@@ -177,7 +264,7 @@ export class MoqChatSubscription {
       return;
     }
 
-    const relayUrl = parseRelayUrl(this.relayUrl);
+    const relayUrl = parseRelayUrl(this.#relayUrl);
 
     console.log(
       "Connecting to MoQ relay:",
@@ -196,25 +283,27 @@ export class MoqChatSubscription {
     this.#connection = connection;
 
     const subscription = connection
-      .consume(Moq.Path.from(this.broadcastName))
+      .consume(Moq.Path.from(this.#broadcastName))
       .track(CHAT_TRACK)
       .subscribe({
         priority: 0,
       });
 
     console.log("Connected to MoQ relay", {
-      broadcast: this.broadcastName,
+      broadcast: this.#broadcastName,
       track: CHAT_TRACK,
     });
 
-    void this.readLoop(subscription).catch((error) => {
-      if (!this.#closed) {
-        console.error(
-          "MoQ chat subscription stopped:",
-          error,
-        );
-      }
-    });
+    void this.readLoop(subscription).catch(
+      (error) => {
+        if (!this.#closed) {
+          console.error(
+            "MoQ chat subscription stopped:",
+            error,
+          );
+        }
+      },
+    );
   }
 
   private async readLoop(
@@ -249,7 +338,7 @@ export class MoqChatSubscription {
         }
 
         try {
-          const message = await this.codec.decrypt(
+          const message = await this.#codec.decrypt(
             frame.payload,
           );
 
@@ -258,7 +347,7 @@ export class MoqChatSubscription {
           }
 
           this.#seen.add(message.messageId);
-          this.onMessage(message);
+          this.#onMessage(message);
         } catch (error) {
           console.error(
             "Unable to decrypt chat message:",
@@ -280,4 +369,3 @@ export class MoqChatSubscription {
     this.#connection = undefined;
   }
 }
-
