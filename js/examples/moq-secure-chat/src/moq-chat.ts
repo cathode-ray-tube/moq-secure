@@ -3,6 +3,9 @@ import * as Moq from "@moq/net";
 import { SecureChatCodec } from "./secure-chat.ts";
 import type { ChatMessage } from "./types.ts";
 
+const DEFAULT_RELAY_URL =
+  "https://cdn.moqtv.com:4443/";
+
 const CHAT_TRACK = "messages";
 
 type Connection = Awaited<
@@ -57,16 +60,19 @@ export class MoqChatPublisher {
 
   #connection?: Connection;
   #group?: Group;
-  #connectPromise?: Promise<void>;
   #closed = false;
 
   constructor(
-    private readonly relayUrl: string,
     private readonly broadcastName: string,
     private readonly codec: SecureChatCodec,
+    private readonly relayUrl = DEFAULT_RELAY_URL,
   ) {
+    const broadcastPath = Moq.Path.from(
+      this.broadcastName,
+    );
+
     this.#broadcast = new Moq.Broadcast.Producer(
-      Moq.Path.from(this.broadcastName),
+      broadcastPath,
     );
 
     this.#track = this.#broadcast.createTrack(
@@ -83,20 +89,6 @@ export class MoqChatPublisher {
       return;
     }
 
-    if (this.#connectPromise) {
-      return this.#connectPromise;
-    }
-
-    this.#connectPromise = this.#connect();
-
-    try {
-      await this.#connectPromise;
-    } finally {
-      this.#connectPromise = undefined;
-    }
-  }
-
-  async #connect(): Promise<void> {
     const relayUrl = parseRelayUrl(this.relayUrl);
 
     console.log(
@@ -107,8 +99,6 @@ export class MoqChatPublisher {
     const connection = await Moq.Connection.connect(
       relayUrl,
       {
-        // This is sufficient for a Broadcast.Producer.
-        // A subscriber does not need to exist first.
         publish: this.#broadcast.consume(),
       },
     );
@@ -120,21 +110,16 @@ export class MoqChatPublisher {
 
     this.#connection = connection;
 
-    console.log(
-      "Connected to MoQ relay",
-      {
-        broadcast: this.broadcastName,
-        track: CHAT_TRACK,
-      },
-    );
+    console.log("Connected to MoQ relay", {
+      broadcast: this.broadcastName,
+      track: CHAT_TRACK,
+    });
   }
 
   async send(message: ChatMessage): Promise<void> {
     if (this.#closed) {
       throw new Error("Publisher is closed");
     }
-
-    await this.connect();
 
     if (!this.#connection) {
       throw new Error("Publisher is not connected");
@@ -146,16 +131,9 @@ export class MoqChatPublisher {
       this.#group = this.#track.appendGroup();
     }
 
-    try {
-      this.#group.writeFrame({ payload });
-    } catch (error) {
-      this.#group = undefined;
-
-      throw new Error(
-        "Unable to publish chat message",
-        { cause: error },
-      );
-    }
+    this.#group.writeFrame({
+      payload,
+    });
   }
 
   close(): void {
@@ -168,10 +146,10 @@ export class MoqChatPublisher {
     this.#group?.close();
     this.#group = undefined;
 
+    this.#broadcast.close();
+
     this.#connection?.close();
     this.#connection = undefined;
-
-    this.#broadcast.close();
   }
 }
 
@@ -179,16 +157,15 @@ export class MoqChatSubscription {
   readonly #seen = new Set<string>();
 
   #connection?: Connection;
-  #readLoopPromise?: Promise<void>;
   #closed = false;
 
   constructor(
-    private readonly relayUrl: string,
     private readonly broadcastName: string,
     private readonly codec: SecureChatCodec,
     private readonly onMessage: (
       message: ChatMessage,
     ) => void,
+    private readonly relayUrl = DEFAULT_RELAY_URL,
   ) {}
 
   async connect(): Promise<void> {
@@ -225,19 +202,12 @@ export class MoqChatSubscription {
         priority: 0,
       });
 
-    console.log(
-      "Connected to MoQ relay",
-      {
-        broadcast: this.broadcastName,
-        track: CHAT_TRACK,
-      },
-    );
+    console.log("Connected to MoQ relay", {
+      broadcast: this.broadcastName,
+      track: CHAT_TRACK,
+    });
 
-    this.#readLoopPromise = this.readLoop(
-      subscription,
-    );
-
-    void this.#readLoopPromise.catch((error) => {
+    void this.readLoop(subscription).catch((error) => {
       if (!this.#closed) {
         console.error(
           "MoQ chat subscription stopped:",
@@ -305,6 +275,7 @@ export class MoqChatSubscription {
     }
 
     this.#closed = true;
+
     this.#connection?.close();
     this.#connection = undefined;
   }
