@@ -5,19 +5,37 @@ import type { ChatMessage } from "./types.ts";
 
 const CHAT_TRACK = "messages";
 
-type Broadcast = Moq.Broadcast.Producer;
-type Track = Moq.Track.Producer;
-type Group = ReturnType<Track["appendGroup"]>;
-
 type Connection = Awaited<
   ReturnType<typeof Moq.Connection.connect>
 >;
 
-type Consumer = ReturnType<
+type Broadcast = Moq.Broadcast.Producer;
+type Track = Moq.Track.Producer;
+type Group = ReturnType<Track["appendGroup"]>;
+
+type Subscription = ReturnType<
   ReturnType<
     Connection["consume"]
   >["track"]
 >["subscribe"];
+
+function parseRelayUrl(relayUrl: string): URL {
+  const value = relayUrl.trim();
+
+  if (!value) {
+    throw new Error(
+      "MoQ relay URL is empty. Configure a valid relay URL.",
+    );
+  }
+
+  try {
+    return new URL(value);
+  } catch {
+    throw new Error(
+      `Invalid MoQ relay URL: "${relayUrl}"`,
+    );
+  }
+}
 
 export class MoqChatPublisher {
   readonly #broadcast: Broadcast;
@@ -43,10 +61,14 @@ export class MoqChatPublisher {
   }
 
   async connect(): Promise<void> {
-    this.#connection = await Moq.Connection.connect({
-      url: new URL(this.relayUrl),
-      publish: this.#broadcast.consume(),
-    });
+    const relayUrl = parseRelayUrl(this.relayUrl);
+
+    this.#connection = await Moq.Connection.connect(
+      relayUrl,
+      {
+        publish: this.#broadcast.consume(),
+      },
+    );
 
     this.#broadcast.announce();
   }
@@ -89,25 +111,27 @@ export class MoqChatSubscription {
   ) {}
 
   async connect(): Promise<void> {
-    this.#connection = await Moq.Connection.connect({
-      url: new URL(this.relayUrl),
-    });
+    const relayUrl = parseRelayUrl(this.relayUrl);
 
-    const consumer = this.#connection
+    this.#connection = await Moq.Connection.connect(
+      relayUrl,
+    );
+
+    const subscription = this.#connection
       .consume(Moq.Path.from(this.broadcastName))
       .track(CHAT_TRACK)
       .subscribe({
         priority: 0,
       });
 
-    void this.readLoop(consumer);
+    void this.readLoop(subscription);
   }
 
   private async readLoop(
-    consumer: Consumer,
+    subscription: Subscription,
   ): Promise<void> {
     for (;;) {
-      const group = await consumer.recvGroup();
+      const group = await subscription.recvGroup();
 
       if (!group) {
         return;
@@ -156,3 +180,4 @@ export class MoqChatSubscription {
     this.#connection?.close();
   }
 }
+
