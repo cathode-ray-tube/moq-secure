@@ -1,18 +1,20 @@
 import * as Moq from "@moq/net";
+import { Producer } from "@moq/net/group.js";
+
 import { SecureChatCodec } from "./secure-chat.ts";
 import type { ChatMessage } from "./types.ts";
 
 const CHAT_TRACK = "messages";
 
 export class MoqChatPublisher {
-  readonly #origin = new Moq.Origin.Producer();
+  readonly #origin = new Producer();
+
   readonly #broadcast: ReturnType<
-    Moq.Origin.Producer["createBroadcast"]
+    Producer["createBroadcast"]
   >;
+
   readonly #track: ReturnType<
-    ReturnType<
-      Moq.Origin.Producer["createBroadcast"]
-    >["createTrack"]
+    ReturnType<Producer["createBroadcast"]>["createTrack"]
   >;
 
   #connection?: Awaited<
@@ -21,9 +23,7 @@ export class MoqChatPublisher {
 
   #group?: ReturnType<
     ReturnType<
-      ReturnType<
-        Moq.Origin.Producer["createBroadcast"]
-      >["createTrack"]
+      ReturnType<Producer["createBroadcast"]>["createTrack"]
     >["appendGroup"]
   >;
 
