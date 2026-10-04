@@ -1,5 +1,5 @@
 import * as Moq from "@moq/net";
-import { Producer } from "@moq/net/group.js";
+import { Producer } from "@moq/net";
 
 import { SecureChatCodec } from "./secure-chat.ts";
 import type { ChatMessage } from "./types.ts";
