@@ -603,7 +603,7 @@ fn build_ui(app: &gtk::Application, initial_player: Rc<Player>) {
                     for (index, (url, broadcast)) in
                         entries.borrow().iter().enumerate()
                     {
-                        match Player::new(&url.text(), &broadcast.text()) {
+                        match Player::new(&url.text(), &broadcast.text(), true, true) {
                             Ok(player) => {
                                 let player = Rc::new(player);
                                 player.install_bus_watch(&app);
@@ -735,7 +735,7 @@ fn main() {
         .build();
 
     app.connect_activate(|app| {
-        let player = match Player::new(MOQ_URL, MOQ_BROADCAST) {
+        let player = match Player::new(MOQ_URL, MOQ_BROADCAST, true, true) {
             Ok(player) => Rc::new(player),
             Err(error) => {
                 eprintln!("Could not create player: {error}");
