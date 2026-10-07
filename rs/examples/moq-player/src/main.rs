@@ -503,7 +503,7 @@ fn build_ui(app: &gtk::Application, initial_player: Rc<Player>) {
     {
         let panel = settings_panel.clone();
         let grid = tile_grid.clone();
-        let selected_layout = Rc::clone(&selected_layout);
+        let selected_layout_for_apply = Rc::clone(&selected_layout);
         let tile_inputs = Rc::clone(&tile_inputs);
         let rebuild_settings = Rc::clone(&rebuild_settings);
         let current_players = Rc::clone(&current_players);
@@ -514,7 +514,7 @@ fn build_ui(app: &gtk::Application, initial_player: Rc<Player>) {
                 panel.remove(&child);
             }
 
-            let layout = selected_layout.get();
+            let layout = selected_layout_for_apply.get();
             let count = layout_tile_count(layout);
 
             panel.append(&gtk::Label::new(Some("Tile layout")));
@@ -649,26 +649,22 @@ fn build_ui(app: &gtk::Application, initial_player: Rc<Player>) {
 
                         grid.attach(&frame, col, row, width, height);
 
-                        let picture = picture.clone();
-                        let player = Rc::clone(player);
+                       let picture = picture.clone();
+                        let player_for_timeout = Rc::clone(player);
+                        
+                        glib::timeout_add_local(Duration::from_millis(250), move || {
+                            let Some(paintable) = player_for_timeout.paintable() else {
+                                return glib::ControlFlow::Continue;
+                            };
+                        
+                            if paintable.intrinsic_width() > 0 && paintable.intrinsic_height() > 0 {
+                                picture.set_paintable(Some(&paintable));
+                                glib::ControlFlow::Break
+                            } else {
+                                glib::ControlFlow::Continue
+                            }
+                        });
 
-                        glib::timeout_add_local(
-                            Duration::from_millis(250),
-                            move || {
-                                let Some(paintable) = player.paintable() else {
-                                    return glib::ControlFlow::Continue;
-                                };
-
-                                if paintable.intrinsic_width() > 0
-                                    && paintable.intrinsic_height() > 0
-                                {
-                                    picture.set_paintable(Some(&paintable));
-                                    glib::ControlFlow::Break
-                                } else {
-                                    glib::ControlFlow::Continue
-                                }
-                            },
-                        );
 
                         player.play();
                     }
@@ -751,4 +747,3 @@ fn main() {
 
     app.run();
 }
-
