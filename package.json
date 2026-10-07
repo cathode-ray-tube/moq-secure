@@ -15,6 +15,7 @@
     "typecheck": "npm run typecheck --workspace js"
   },
   "overrides": {
-  "esbuild": "0.28.2"
+  "esbuild": "0.28.2",
+  "source-map-js": "^1.2.2"
 }
 }
