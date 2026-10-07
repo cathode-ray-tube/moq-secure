@@ -282,9 +282,9 @@ Any secure-object integration should verify data before it reaches the decoder a
 
 ## Documentation
 
-- [Architecture and code walkthrough](https://github.com/cathode-ray-tube/moq-secure/main/rs/examples/moq-player/docs/architecture.md)
-- [GStreamer pipeline](https://github.com/cathode-ray-tube/moq-secure/main/rs/examples/moq-player/docs/pipeline.md)
-- [Development notes](https://github.com/cathode-ray-tube/moq-secure/main/rs/examples/moq-player/docs/development.md)
+- [Architecture and code walkthrough]([https://github.com/cathode-ray-tube/moq-secure/main/rs/examples/moq-player/docs/architecture.md](https://github.com/cathode-ray-tube/moq-secure/blob/main/rs/examples/moq-player/docs/architecture.md))
+- [GStreamer pipeline]([https://github.com/cathode-ray-tube/moq-secure/main/rs/examples/moq-player/docs/pipeline.md](https://github.com/cathode-ray-tube/moq-secure/blob/main/rs/examples/moq-player/docs/pipeline.md))
+- [Development notes]([https://github.com/cathode-ray-tube/moq-secure/main/rs/examples/moq-player/docs/development.md](https://github.com/cathode-ray-tube/moq-secure/blob/main/rs/examples/moq-player/docs/development.md)
 
 ## License
 
