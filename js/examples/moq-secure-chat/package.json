@@ -11,13 +11,9 @@
     "@moq/net": "^0.3.5",
     "@noble/hashes": "^2.4.0"
   },
-  "devDependencies": {
+   "devDependencies": {
     "typescript": "^5.9.3",
-<<<<<<< HEAD
-    "vite": "6.4.4"
-=======
     "vite": "^6.4.4"
->>>>>>> 9aec13d (update)
   },
   "version": "1.0.0",
   "description": "",
