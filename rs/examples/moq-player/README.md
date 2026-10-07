@@ -288,5 +288,5 @@ Any secure-object integration should verify data before it reaches the decoder a
 
 ## License
 
-Add the license for this project here, and include the corresponding license file(s) in the repository.
+This project is dual-licensed: MIT OR Apache-2.0, choose either. See LICENSE-MIT and LICENSE-APACHE-2.0 in the repository root.
 
