@@ -181,7 +181,7 @@ bbb.hang
 
 It starts the initial player automatically. Open **Settings** to select a layout and configure stream inputs. Select **Apply & Play** to recreate the players using those settings.
 
-If the project is published as a Cargo package, it can also be installed with:
+The project is published as a Cargo package. It can also be installed with:
 
 ```bash
 cargo install moq-player
