@@ -539,11 +539,12 @@ fn build_ui(app: &gtk::Application, initial_player: Rc<Player>) {
 
                 let selected_layout = Rc::clone(&selected_layout);
                 let rebuild_settings = Rc::clone(&rebuild_settings);
+                let rebuild_settings_for_button = Rc::clone(&rebuild_settings);
 
                 button.connect_clicked(move |_| {
                     selected_layout.set(index);
 
-                    if let Some(rebuild) = rebuild_settings.borrow().as_ref() {
+                       if let Some(rebuild) = rebuild_settings_for_button.borrow().as_ref() {
                         rebuild();
                     }
                 });
@@ -596,6 +597,7 @@ fn build_ui(app: &gtk::Application, initial_player: Rc<Player>) {
                 let players = Rc::clone(&current_players);
                 let app = app.clone();
                 let grid = grid.clone();
+                let selected_layout_for_apply = Rc::clone(&selected_layout);
 
                 apply.connect_clicked(move |_| {
                     let mut new_players = Vec::new();
@@ -629,7 +631,7 @@ fn build_ui(app: &gtk::Application, initial_player: Rc<Player>) {
                         grid.remove(&child);
                     }
 
-                    let layout = selected_layout.get();
+                    let layout = selected_layout_for_apply.get();
 
                     for (index, player) in players.borrow().iter().enumerate() {
                         let picture = gtk::Picture::builder()
