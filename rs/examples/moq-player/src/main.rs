@@ -538,7 +538,6 @@ fn build_ui(app: &gtk::Application, initial_player: Rc<Player>) {
                 layout_buttons.append(button);
 
                 let selected_layout = Rc::clone(&selected_layout);
-                let rebuild_settings = Rc::clone(&rebuild_settings);
                 let rebuild_settings_for_button = Rc::clone(&rebuild_settings);
 
                 button.connect_clicked(move |_| {
