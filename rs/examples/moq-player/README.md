@@ -278,8 +278,6 @@ The intended future processing flow is:
 MoQ source → verify/decrypt media objects → parse/decode → render
 ```
 
-Any secure-object integration should verify data before it reaches the decoder and define key distribution, failure handling, and user-visible trust status.
-
 ## Documentation
 
 - [Architecture and code walkthrough](https://github.com/cathode-ray-tube/moq-secure/blob/main/rs/examples/moq-player/docs/architecture.md)
