@@ -1,60 +1,52 @@
 # moq-player
 
-![moq-player-screenshot](https://raw.githubusercontent.com/cathode-ray-tube/moq-secure/main/assets/moq-player.jpg)
+A native desktop player for MoQ audio/video streams, built with Rust, GTK4, and GStreamer.
 
-A native desktop player for MoQ streams using Rust, GTK4 and GStreamer.
+The application subscribes to a MoQ broadcast through GStreamer's `moqsrc` element, decodes H.264 video and AAC audio, and renders them in a GTK4 window. Use the Settings panel to choose a layout and configure the URL and broadcast for each tile.
 
-MoQ-Secure is not yet integrated.
+> **Status:** This player currently plays MoQ streams. MoQ-Secure encryption and signature verification are not integrated.
 
-This forms the basis of a MoQ media player (including encryption/signing).  I will include this in my [moq-tv](https://github.com/cathode-ray-tube/moq-tv) repo (mainly targeting Smart TVs at the moment).
+![moq-player screenshot](https://raw.githubusercontent.com/cathode-ray-tube/moq-secure/main/assets/moq-player.jpg)
 
-## What this is
-- A Rust project targeting Linux that uses **GTK4** and **GStreamer**.
-- Current pipeline is a real video decoder/player, connecting to a MoQ Relay and playing audio/video.
+## Features
 
-## Security / streaming direction
-- Transport: **Media over Quic (MoQ)**
-- Planned payload protection: **moq-secure** (encrypt + sign media payloads)
-- Intended architecture: streaming layer (MoQ) → verified/decrypted media chunks → decoder → renderer.
+- Subscribe to a MoQ stream using a URL and broadcast name.
+- Play video and audio through GStreamer.
+- Display one, three, or four stream tiles.
+- Choose from four layouts:
+  - One full-size tile
+  - Three side-by-side tiles
+  - A 2×2 grid
+  - One large tile with two smaller stacked tiles
+- Configure each tile's MoQ URL and broadcast in the Settings panel.
+- Start and stop all configured players from the main window.
 
-## Current status
- - Plays MoQ audio and video.
- - MOQ-Secure not yet added.
+The layout buttons determine the number of active tiles. The three-tile layouts use three streams; the 2×2 layout uses four. Each tile currently uses the same playback pipeline and enables both audio and video.
 
-## Install
+## Requirements
 
-### Supported platforms
+- Rust toolchain
+- GTK4 development libraries
+- GStreamer development libraries and runtime plugins
+- The MoQ GStreamer plugin, providing `moqsrc`
+- The GStreamer GTK4 video sink, providing `gtk4paintablesink`
+- GStreamer elements used by the pipeline:
+  - `h264parse`
+  - `aacparse`
+  - `decodebin3`
+  - `videoconvert`
+  - `audioconvert`
+  - `audioresample`
+  - `volume`
+  - `pipewiresink`
 
-- Ubuntu and Debian
-- Fedora, RHEL, Rocky Linux, and AlmaLinux
-- macOS on Apple Silicon
+The audio output is currently configured to use `pipewiresink`, so a working PipeWire audio setup is needed for audio playback.
 
-Windows is not currently supported.
+## Install system dependencies
 
-### Requirements
+Package names and plugin availability vary between operating-system releases. Install the GTK4 and GStreamer development packages, GStreamer runtime plugins, and the MoQ plugin appropriate for your system.
 
-The application requires:
-
-- Rust
-- GTK4
-- GStreamer 1.24 or newer
-- The MoQ GStreamer plugin
-- The GStreamer GTK4 video sink
-
-The MoQ plugin provides:
-
-- `moqsrc`
-- `moqsink`
-
-The GTK4 video sink provides:
-
-- `gtk4paintablesink`
-
-### Install dependencies
-
-#### Ubuntu or Debian
-
-Install the required packages:
+### Ubuntu or Debian
 
 ```bash
 sudo apt update
@@ -75,7 +67,7 @@ sudo apt install -y \
   gstreamer1.0-gtk4
 ```
 
-Install the MoQ GStreamer plugin:
+Install the MoQ GStreamer plugin using the current instructions from the plugin provider. For example, if the MoQ APT repository is available for your distribution:
 
 ```bash
 curl -fsSL https://apt.moq.dev/moq-keyring.gpg \
@@ -88,17 +80,12 @@ sudo apt update
 sudo apt install -y gstreamer1.0-moq
 ```
 
-#### Fedora, RHEL, Rocky Linux, or AlmaLinux
+### Fedora, RHEL, Rocky Linux, or AlmaLinux
 
-These distributions use `dnf`.
-
-On RHEL, Rocky Linux, and AlmaLinux, ensure that the standard BaseOS and AppStream repositories are enabled.
-
-Install the required packages:
+Install the GTK4, GStreamer development, and runtime packages available for your distribution. For example:
 
 ```bash
 sudo dnf install -y \
-  dnf-plugins-core \
   gcc \
   gcc-c++ \
   make \
@@ -113,153 +100,135 @@ sudo dnf install -y \
   gstreamer1-plugins-bad-free \
   gstreamer1-plugins-bad-free-extras \
   gstreamer1-libav \
-  gstreamer1-plugins-base-tools \
-  gstreamer1-plugins-rs
+  gstreamer1-plugins-base-tools
 ```
 
-Some distributions use a different package name for the Rust-based GStreamer plugins. If `gstreamer1-plugins-rs` is unavailable, search for the available package:
+Install the package that provides `gtk4paintablesink` if it is not included in the packages above. Package names can differ across Fedora and Enterprise Linux releases.
 
-```bash
-dnf search gstreamer gtk4
-```
-
-Install the package that provides `gtk4paintablesink`.
-
-Install the MoQ GStreamer plugin:
+Install the MoQ plugin using the instructions for your distribution. If the MoQ RPM repository is available:
 
 ```bash
 sudo dnf config-manager --add-repo https://rpm.moq.dev/moq.repo
 sudo dnf install -y gstreamer1-moq
 ```
 
-#### macOS
+### macOS
 
-The prebuilt MoQ plugin currently supports Apple Silicon Macs.
+The code uses `pipewiresink` for audio output. PipeWire is not a standard macOS audio backend, so macOS playback will require a compatible audio sink or a code/configuration change.
 
-Install Homebrew packages:
+For GTK4 and GStreamer, install a consistent set of development and runtime packages. For example:
 
 ```bash
 brew install gtk4 gstreamer
 ```
 
-The GTK4 GStreamer sink is provided by the GStreamer Rust plugins. Install the package if it is available for your Homebrew setup:
+Install the GStreamer plugins that provide `gtk4paintablesink`, the parsers, and the decoders used by the pipeline. Install the MoQ plugin build that matches your GStreamer installation and Apple Silicon architecture.
 
-```bash
-brew install gst-plugins-rs
-```
+Do not mix Homebrew GStreamer libraries with the official GStreamer framework unless you configure and test the library and plugin paths carefully.
 
-If Homebrew does not provide `gst-plugins-rs`, install the official GStreamer runtime and development packages from:
+## Verify GStreamer plugins
 
-<https://gstreamer.freedesktop.org/download/>
-
-Use one GStreamer installation consistently. Do not mix Homebrew GStreamer libraries with the official GStreamer framework unless you configure the library paths carefully.
-
-Download the macOS Apple Silicon `moq-gst` tarball from the moq project's GitHub [releases](https://github.com/moq-dev/moq/releases) page.
-
-Extract and install the MoQ plugin:
-
-```bash
-tar -xzf moq-gst-*.tar.gz
-cd moq-gst-*
-
-mkdir -p "$HOME/Library/Application Support/GStreamer/1.0/plugins"
-
-cp lib/gstreamer-1.0/libgstmoq.dylib \
-  "$HOME/Library/Application Support/GStreamer/1.0/plugins/"
-```
-
-If GStreamer was installed with the official installer, set the command path:
-
-```bash
-export PATH="/Library/Frameworks/GStreamer.framework/Versions/1.0/bin:$PATH"
-```
-
-If GStreamer was installed with Homebrew, its libraries are normally located at:
-
-```text
-/opt/homebrew/lib
-```
-
-If necessary, set:
-
-```bash
-export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH"
-```
-### Verify the GStreamer installation
-
-Same commands on every supported platform:
+Check that GStreamer can find the elements required by the application:
 
 ```bash
 gst-inspect-1.0 moq
 gst-inspect-1.0 gtk4paintablesink
+gst-inspect-1.0 h264parse
+gst-inspect-1.0 aacparse
+gst-inspect-1.0 decodebin3
+gst-inspect-1.0 pipewiresink
 ```
 
-Both commands must succeed.
+The MoQ plugin must expose `moqsrc`. The application also constructs the other listed elements at runtime; a missing element prevents player creation.
 
-The MoQ plugin should list:
+To check GStreamer plugin discovery in more detail:
 
-```text
-moqsrc
-moqsink
+```bash
+GST_DEBUG=2 gst-inspect-1.0 moq
 ```
 
-The second command should display information about:
+## Install Rust
 
-```text
-gtk4paintablesink
-```
-
-If either command fails, `moq-player` will not run correctly. See `Troubleshooting` below.
-
-### Install Rust
-
-Install Rust if it is not already installed:
+If Rust is not installed, install it with rustup:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-Load Rust into the current terminal:
-
-```bash
 source "$HOME/.cargo/env"
 ```
 
-Verify the installation:
+Verify the toolchain:
 
 ```bash
 rustc --version
 cargo --version
 ```
 
-### Install moq-player
+## Build and run from source
+
+From the project directory:
+
+```bash
+cargo build --release
+cargo run --release
+```
+
+The application starts with the default URL and broadcast configured in the source:
+
+```text
+https://cdn.moq.dev/demo
+bbb.hang
+```
+
+It starts the initial player automatically. Open **Settings** to select a layout and configure stream inputs. Select **Apply & Play** to recreate the players using those settings.
+
+If the project is published as a Cargo package, it can also be installed with:
 
 ```bash
 cargo install moq-player
-```
-
-### Run moq-player
-
-```bash
 moq-player
 ```
 
-A window should open and begin playing the default `Big Buck Bunny` broadcast.
+## Using the player
 
-### Troubleshooting
+1. Launch the application. The default stream starts automatically.
+2. Select **Settings** to open the side panel.
+3. Choose a layout using the layout buttons.
+4. Enter a MoQ URL and broadcast name for each tile.
+5. Select **Apply & Play** to create and start the configured players.
+6. Use **Play** or **Stop** to control all active players.
+7. Select **Quit** or close the window to exit.
 
-#### macOS plugin path
+Changing a layout rebuilds the settings panel and the number of stream inputs. Applying settings stops the old pipelines, replaces them, and starts the new ones.
 
-If macOS cannot find the MoQ plugin, set the plugin path manually:
+## Troubleshooting
+
+### `Could not create element ...`
+
+A required GStreamer element is missing or is not visible to the GStreamer runtime used by the application. Check it with:
 
 ```bash
-export GST_PLUGIN_PATH="$HOME/Library/Application Support/GStreamer/1.0/plugins"
+gst-inspect-1.0 ELEMENT_NAME
+```
+
+For example:
+
+```bash
+gst-inspect-1.0 moqsrc
+gst-inspect-1.0 gtk4paintablesink
+gst-inspect-1.0 pipewiresink
+```
+
+Make sure `gst-inspect-1.0` and the application use the same GStreamer installation and plugin paths.
+
+### MoQ plugin is not detected
+
+Check the plugin installation and search path:
+
+```bash
 gst-inspect-1.0 moq
 ```
 
-#### Clear the GStreamer plugin cache
-
-If a plugin was installed but is not detected, clear the plugin cache.
+On macOS, set `GST_PLUGIN_PATH` to the directory containing the MoQ plugin if needed. Clear the GStreamer registry cache after installing or replacing plugins.
 
 Linux:
 
@@ -273,21 +242,51 @@ macOS:
 rm -f "$HOME/Library/Caches/GStreamer/1.0/registry-"*.bin
 ```
 
-Then retry:
+### The window opens but a tile stays blank
+
+Check the application’s terminal output for messages about MoQ pads, caps, and GStreamer errors. Confirm that the broadcast contains supported audio or video streams and that the required parser and decoder plugins are installed.
+
+### Video works but audio does not
+
+The current pipeline sends audio to `pipewiresink`. Confirm that PipeWire is running and that `pipewiresink` is available:
 
 ```bash
-gst-inspect-1.0 moq
-gst-inspect-1.0 gtk4paintablesink
+gst-inspect-1.0 pipewiresink
 ```
 
-### Windows
+### Audio/video timing needs adjustment
 
-Windows is not currently supported.
+The pipeline currently sets a fixed audio sink timestamp offset in the source code. This value may need tuning for a particular stream, sink, or system.
 
-The current MoQ plugin releases provide binaries for:
+## Current limitations
+
+- MoQ-Secure encryption and signature verification are not implemented.
+- The input pipeline expects H.264 video and AAC audio.
+- Audio output is hard-coded to `pipewiresink`.
+- Each tile creates its own playback pipeline; configuring several tiles can use substantial CPU, GPU, network, and audio resources.
+- The application links the first matching audio and video pads. Additional pads of the same media type are ignored.
+- Stream configuration is entered in the UI and is not persisted between launches.
+- Windows is not currently supported.
+
+## Security and planned work
+
+The current player receives and decodes stream media; it does not authenticate or decrypt media using MoQ-Secure. Do not treat the current application as providing end-to-end media authenticity or confidentiality beyond protections provided by the transport and deployment.
+
+The intended future processing flow is:
 
 ```text
-x86_64-unknown-linux-gnu
-aarch64-unknown-linux-gnu
-aarch64-apple-darwin
+MoQ source → verify/decrypt media objects → parse/decode → render
 ```
+
+Any secure-object integration should verify data before it reaches the decoder and define key distribution, failure handling, and user-visible trust status.
+
+## Documentation
+
+- [Architecture and code walkthrough](docs/architecture.md)
+- [GStreamer pipeline](docs/pipeline.md)
+- [Development notes](docs/development.md)
+
+## License
+
+Add the license for this project here, and include the corresponding license file(s) in the repository.
+
