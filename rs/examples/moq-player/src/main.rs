@@ -508,7 +508,7 @@ fn build_ui(app: &gtk::Application, initial_player: Rc<Player>) {
         let rebuild_settings = Rc::clone(&rebuild_settings);
         let current_players = Rc::clone(&current_players);
         let app = app.clone();
-
+        let rebuild_settings_for_closure = Rc::clone(&rebuild_settings);
         let rebuild: Rc<dyn Fn()> = Rc::new(move || {
             while let Some(child) = panel.first_child() {
                 panel.remove(&child);
@@ -535,19 +535,20 @@ fn build_ui(app: &gtk::Application, initial_player: Rc<Player>) {
             }
 
             for (index, button) in buttons.iter().enumerate() {
-                layout_buttons.append(button);
-
-                let selected_layout = Rc::clone(&selected_layout);
-                let rebuild_settings_for_button = Rc::clone(&rebuild_settings);
-
-                button.connect_clicked(move |_| {
-                    selected_layout.set(index);
-
-                       if let Some(rebuild) = rebuild_settings_for_button.borrow().as_ref() {
-                        rebuild();
-                    }
-                });
-            }
+            layout_buttons.append(button);
+        
+            let selected_layout_for_button = Rc::clone(&selected_layout);
+            let rebuild_settings_for_button =
+                Rc::clone(&rebuild_settings_for_closure);
+        
+            button.connect_clicked(move |_| {
+                selected_layout_for_button.set(index);
+        
+                if let Some(rebuild) = rebuild_settings_for_button.borrow().as_ref() {
+                    rebuild();
+                }
+            });
+        }
 
             buttons[layout].set_active(true);
             panel.append(&layout_buttons);
