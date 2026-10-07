@@ -84,7 +84,7 @@ cargo install moq-player
 moq-player
 ```
 
-See full [instructions](https://github.com/cathode-ray-tube/moq-secure/blob/main/rs/examples/moq-player/README.md)
+See full [instructions](https://github.com/cathode-ray-tube/moq-secure/blob/main/rs/examples/moq-player/README.md).
 
 ## Specification
 
