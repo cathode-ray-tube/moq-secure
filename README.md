@@ -79,12 +79,7 @@ A native desktop player for MoQ audio/video streams using Rust, GTK4, and GStrea
 
 > **MoQ-Secure is not integrated.** This version does not encrypt, decrypt, or verify media using MoQ-Secure.
 
-```bash
-cargo install moq-player
-moq-player
-```
-
-See full [instructions](https://github.com/cathode-ray-tube/moq-secure/blob/main/rs/examples/moq-player/README.md).
+See [instructions](https://github.com/cathode-ray-tube/moq-secure/blob/main/rs/examples/moq-player/README.md).
 
 ## Specification
 
