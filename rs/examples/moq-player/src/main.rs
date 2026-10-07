@@ -329,10 +329,78 @@ impl Drop for Player {
     }
 }
 
-fn build_ui(
-    app: &gtk::Application,
-    initial_player: Rc<Player>,
-) {
+fn layout_tile_count(layout: usize) -> usize {
+    match layout {
+        0 => 3, // Three portrait tiles
+        1 => 4, // 2x2 square tiles
+        2 => 3, // Main plus two stacked
+        _ => 1, // Single full-size tile
+    }
+}
+
+fn tile_position(layout: usize, tile: usize) -> (i32, i32, i32, i32) {
+    match layout {
+        // Three portrait tiles, side by side.
+        0 => (tile as i32, 0, 1, 1),
+
+        // Four-tile 2x2 grid.
+        1 => ((tile % 2) as i32, (tile / 2) as i32, 1, 1),
+
+        // Large main tile on the left; two stacked tiles on the right.
+        2 => match tile {
+            0 => (0, 0, 2, 2),
+            1 => (2, 0, 1, 1),
+            _ => (2, 1, 1, 1),
+        },
+
+        // One full-size tile.
+        _ => (0, 0, 1, 1),
+    }
+}
+
+fn layout_diagram(layout: usize) -> gtk::Widget {
+    let diagram = gtk::Grid::builder()
+        .row_spacing(2)
+        .column_spacing(2)
+        .width_request(68)
+        .height_request(44)
+        .build();
+
+    let tile = |label: &str| {
+        let frame = gtk::Frame::new(None);
+        frame.set_child(Some(&gtk::Label::new(Some(label))));
+        frame
+    };
+
+    match layout {
+        0 => {
+            for col in 0..3 {
+                diagram.attach(&tile("▯"), col, 0, 1, 1);
+            }
+        }
+        1 => {
+            for row in 0..2 {
+                for col in 0..2 {
+                    diagram.attach(&tile("□"), col, row, 1, 1);
+                }
+            }
+        }
+        2 => {
+            diagram.attach(&tile("MAIN"), 0, 0, 2, 2);
+            diagram.attach(&tile("1"), 2, 0, 1, 1);
+            diagram.attach(&tile("2"), 2, 1, 1, 1);
+        }
+        _ => {
+            diagram.attach(&tile("FULL"), 0, 0, 1, 1);
+        }
+    }
+
+    diagram.upcast()
+}
+
+fn build_ui(app: &gtk::Application, initial_player: Rc<Player>) {
+    use std::cell::RefCell;
+
     let window = gtk::ApplicationWindow::builder()
         .application(app)
         .title("MoQ GStreamer Player")
@@ -342,99 +410,85 @@ fn build_ui(
 
     let root = gtk::Box::new(gtk::Orientation::Vertical, 8);
 
-    let picture = gtk::Picture::builder()
+    let content = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    content.set_hexpand(true);
+    content.set_vexpand(true);
+
+    let tile_grid = gtk::Grid::builder()
         .hexpand(true)
         .vexpand(true)
-        .can_shrink(true)
-        .keep_aspect_ratio(true)
+        .row_spacing(4)
+        .column_spacing(4)
         .build();
 
-    let url_entry = gtk::Entry::builder()
-        .placeholder_text("MoQ URL")
-        .text(MOQ_URL)
-        .build();
+    let settings_panel = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    settings_panel.set_width_request(300);
+    settings_panel.set_margin_start(12);
+    settings_panel.set_margin_end(12);
+    settings_panel.set_margin_top(12);
+    settings_panel.set_margin_bottom(12);
 
-    let broadcast_entry = gtk::Entry::builder()
-        .placeholder_text("Broadcast")
-        .text(MOQ_BROADCAST)
-        .build();
-
-    let video_check = gtk::CheckButton::with_label("Enable video");
-    video_check.set_active(true);
-
-    let audio_check = gtk::CheckButton::with_label("Enable audio");
-    audio_check.set_active(true);
-
-    let track_list = gtk::Box::new(gtk::Orientation::Vertical, 4);
-    track_list.append(&gtk::Label::new(Some("Discovered pads appear here.")));
-
-    let apply_button = gtk::Button::with_label("Apply & Play");
-
-    let panel_contents = gtk::Box::new(gtk::Orientation::Vertical, 8);
-    panel_contents.set_margin_start(12);
-    panel_contents.set_margin_end(12);
-    panel_contents.set_margin_top(12);
-    panel_contents.set_margin_bottom(12);
-    panel_contents.set_width_request(280);
-    panel_contents.append(&gtk::Label::new(Some("Stream settings")));
-    panel_contents.append(&url_entry);
-    panel_contents.append(&broadcast_entry);
-    panel_contents.append(&video_check);
-    panel_contents.append(&audio_check);
-    panel_contents.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
-    panel_contents.append(&gtk::Label::new(Some("Detected pads")));
-    panel_contents.append(&track_list);
-    panel_contents.append(&apply_button);
-
-    let revealer = gtk::Revealer::builder()
+    let settings_revealer = gtk::Revealer::builder()
         .transition_type(gtk::RevealerTransitionType::SlideRight)
         .transition_duration(200)
         .reveal_child(false)
-        .child(&panel_contents)
+        .child(&settings_panel)
         .build();
 
-    let picture_area = gtk::Overlay::new();
-    picture_area.set_hexpand(true);
-    picture_area.set_vexpand(true);
-    picture_area.set_child(Some(&picture));
-
-    let content = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-    content.append(&revealer);
-    content.append(&picture_area);
-    content.set_vexpand(true);
+    content.append(&settings_revealer);
+    content.append(&tile_grid);
 
     let controls = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     controls.set_margin_start(8);
     controls.set_margin_end(8);
     controls.set_margin_bottom(8);
 
-    let settings_toggle = gtk::ToggleButton::with_label("Settings");
+    let settings_button = gtk::ToggleButton::with_label("Settings");
     let play_button = gtk::Button::with_label("Play");
     let stop_button = gtk::Button::with_label("Stop");
     let quit_button = gtk::Button::with_label("Quit");
 
+    controls.append(&settings_button);
+    controls.append(&play_button);
+    controls.append(&stop_button);
+    controls.append(&quit_button);
+
+    root.append(&content);
+    root.append(&controls);
+    window.set_child(Some(&root));
+
+    let current_players: Rc<RefCell<Vec<Rc<Player>>>> =
+        Rc::new(RefCell::new(vec![initial_player]));
+
+    let selected_layout = Rc::new(Cell::new(3usize));
+
+    // Inputs are rebuilt when the user selects a different layout.
+    let tile_inputs: Rc<RefCell<Vec<(gtk::Entry, gtk::Entry)>>> =
+        Rc::new(RefCell::new(Vec::new()));
+
+    let rebuild_settings: Rc<RefCell<Option<Rc<dyn Fn()>>>> =
+        Rc::new(RefCell::new(None));
+
     {
-        let revealer = revealer.clone();
-        settings_toggle.connect_toggled(move |button| {
-            revealer.set_reveal_child(button.is_active());
+        let settings_revealer = settings_revealer.clone();
+        settings_button.connect_toggled(move |button| {
+            settings_revealer.set_reveal_child(button.is_active());
         });
     }
 
-    let current_player = Rc::new(std::cell::RefCell::new(Some(initial_player)));
-
     {
-        let player = Rc::clone(&current_player);
+        let players = Rc::clone(&current_players);
         play_button.connect_clicked(move |_| {
-            if let Some(player) = player.borrow().as_ref() {
+            for player in players.borrow().iter() {
                 player.play();
             }
         });
     }
 
     {
-        let player = Rc::clone(&current_player);
+        let players = Rc::clone(&current_players);
         stop_button.connect_clicked(move |_| {
-            if let Some(player) = player.borrow().as_ref() {
+            for player in players.borrow().iter() {
                 player.stop();
             }
         });
@@ -445,69 +499,218 @@ fn build_ui(
         quit_button.connect_clicked(move |_| app.quit());
     }
 
+    // Rebuild the side panel when a layout is selected.
     {
-        let player_slot = Rc::clone(&current_player);
+        let panel = settings_panel.clone();
+        let grid = tile_grid.clone();
+        let selected_layout = Rc::clone(&selected_layout);
+        let tile_inputs = Rc::clone(&tile_inputs);
+        let rebuild_settings = Rc::clone(&rebuild_settings);
+        let current_players = Rc::clone(&current_players);
         let app = app.clone();
-        let url_entry = url_entry.clone();
-        let broadcast_entry = broadcast_entry.clone();
-        let video_check = video_check.clone();
-        let audio_check = audio_check.clone();
-        let picture = picture.clone();
 
-        apply_button.connect_clicked(move |_| {
-            let url = url_entry.text().to_string();
-            let broadcast = broadcast_entry.text().to_string();
-
-            let new_player = match Player::new(
-                &url,
-                &broadcast,
-                video_check.is_active(),
-                audio_check.is_active(),
-            ) {
-                Ok(player) => Rc::new(player),
-                Err(error) => {
-                    eprintln!("Could not create player: {error}");
-                    return;
-                }
-            };
-
-            new_player.install_bus_watch(&app);
-
-            if let Some(old_player) = player_slot.borrow_mut().replace(Rc::clone(&new_player)) {
-                old_player.stop();
+        let rebuild: Rc<dyn Fn()> = Rc::new(move || {
+            while let Some(child) = panel.first_child() {
+                panel.remove(&child);
             }
 
-            new_player.play();
+            let layout = selected_layout.get();
+            let count = layout_tile_count(layout);
 
-            // Poll the newly created sink until it publishes its paintable.
-            let picture = picture.clone();
-            let player_for_timer = Rc::clone(&new_player);
+            panel.append(&gtk::Label::new(Some("Tile layout")));
 
-            glib::timeout_add_local(Duration::from_millis(250), move || {
-                let Some(paintable) = player_for_timer.paintable() else {
-                    return glib::ControlFlow::Continue;
+            let layout_buttons = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+            let mut buttons = Vec::new();
+
+            for index in 0..4 {
+                let button = gtk::ToggleButton::new();
+                button.set_child(Some(&layout_diagram(index)));
+                button.set_tooltip_text(Some(match index {
+                    0 => "Three portrait tiles",
+                    1 => "Four square tiles",
+                    2 => "One large tile and two stacked tiles",
+                    _ => "One full-screen tile",
+                }));
+                buttons.push(button);
+            }
+
+            for (index, button) in buttons.iter().enumerate() {
+                layout_buttons.append(button);
+
+                let selected_layout = Rc::clone(&selected_layout);
+                let rebuild_settings = Rc::clone(&rebuild_settings);
+
+                button.connect_clicked(move |_| {
+                    selected_layout.set(index);
+
+                    if let Some(rebuild) = rebuild_settings.borrow().as_ref() {
+                        rebuild();
+                    }
+                });
+            }
+
+            buttons[layout].set_active(true);
+            panel.append(&layout_buttons);
+
+            panel.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
+            panel.append(&gtk::Label::new(Some("Stream inputs")));
+
+            let mut entries = Vec::new();
+
+            for tile in 0..count {
+                let heading = if layout == 2 && tile == 0 {
+                    "Main tile"
+                } else {
+                    match tile {
+                        0 => "Tile 1",
+                        1 => "Tile 2",
+                        2 => "Tile 3",
+                        _ => "Tile 4",
+                    }
                 };
 
-                if paintable.intrinsic_width() > 0
-                    && paintable.intrinsic_height() > 0
-                {
-                    picture.set_paintable(Some(&paintable));
-                    glib::ControlFlow::Break
-                } else {
-                    glib::ControlFlow::Continue
-                }
-            });
+                panel.append(&gtk::Label::new(Some(heading)));
+
+                let url = gtk::Entry::builder()
+                    .placeholder_text("MoQ URL")
+                    .text(MOQ_URL)
+                    .build();
+
+                let broadcast = gtk::Entry::builder()
+                    .placeholder_text("Broadcast")
+                    .text(MOQ_BROADCAST)
+                    .build();
+
+                panel.append(&url);
+                panel.append(&broadcast);
+                entries.push((url, broadcast));
+            }
+
+            *tile_inputs.borrow_mut() = entries;
+
+            let apply = gtk::Button::with_label("Apply & Play");
+            panel.append(&apply);
+
+            {
+                let entries = Rc::clone(&tile_inputs);
+                let players = Rc::clone(&current_players);
+                let app = app.clone();
+                let grid = grid.clone();
+
+                apply.connect_clicked(move |_| {
+                    let mut new_players = Vec::new();
+
+                    for (index, (url, broadcast)) in
+                        entries.borrow().iter().enumerate()
+                    {
+                        match Player::new(&url.text(), &broadcast.text()) {
+                            Ok(player) => {
+                                let player = Rc::new(player);
+                                player.install_bus_watch(&app);
+                                new_players.push(player);
+                            }
+                            Err(error) => {
+                                eprintln!(
+                                    "Could not create player for tile {}: {error}",
+                                    index + 1
+                                );
+                                return;
+                            }
+                        }
+                    }
+
+                    for old_player in players.borrow().iter() {
+                        old_player.stop();
+                    }
+
+                    *players.borrow_mut() = new_players;
+
+                    while let Some(child) = grid.first_child() {
+                        grid.remove(&child);
+                    }
+
+                    let layout = selected_layout.get();
+
+                    for (index, player) in players.borrow().iter().enumerate() {
+                        let picture = gtk::Picture::builder()
+                            .hexpand(true)
+                            .vexpand(true)
+                            .can_shrink(true)
+                            .keep_aspect_ratio(true)
+                            .build();
+
+                        let frame = gtk::Frame::new(None);
+                        frame.set_child(Some(&picture));
+                        frame.set_hexpand(true);
+                        frame.set_vexpand(true);
+
+                        let (col, row, width, height) =
+                            tile_position(layout, index);
+
+                        grid.attach(&frame, col, row, width, height);
+
+                        let picture = picture.clone();
+                        let player = Rc::clone(player);
+
+                        glib::timeout_add_local(
+                            Duration::from_millis(250),
+                            move || {
+                                let Some(paintable) = player.paintable() else {
+                                    return glib::ControlFlow::Continue;
+                                };
+
+                                if paintable.intrinsic_width() > 0
+                                    && paintable.intrinsic_height() > 0
+                                {
+                                    picture.set_paintable(Some(&paintable));
+                                    glib::ControlFlow::Break
+                                } else {
+                                    glib::ControlFlow::Continue
+                                }
+                            },
+                        );
+
+                        player.play();
+                    }
+                });
+            }
         });
+
+        *rebuild_settings.borrow_mut() = Some(Rc::clone(&rebuild));
+        rebuild();
     }
 
-    controls.append(&settings_toggle);
-    controls.append(&play_button);
-    controls.append(&stop_button);
-    controls.append(&quit_button);
+    // Show the initial player in the initial one-tile layout.
+    {
+        let picture = gtk::Picture::builder()
+            .hexpand(true)
+            .vexpand(true)
+            .can_shrink(true)
+            .keep_aspect_ratio(true)
+            .build();
 
-    root.append(&content);
-    root.append(&controls);
-    window.set_child(Some(&root));
+        let frame = gtk::Frame::new(None);
+        frame.set_child(Some(&picture));
+        frame.set_hexpand(true);
+        frame.set_vexpand(true);
+        tile_grid.attach(&frame, 0, 0, 1, 1);
+
+        let player = Rc::clone(&current_players.borrow()[0]);
+        glib::timeout_add_local(Duration::from_millis(250), move || {
+            let Some(paintable) = player.paintable() else {
+                return glib::ControlFlow::Continue;
+            };
+
+            if paintable.intrinsic_width() > 0
+                && paintable.intrinsic_height() > 0
+            {
+                picture.set_paintable(Some(&paintable));
+                glib::ControlFlow::Break
+            } else {
+                glib::ControlFlow::Continue
+            }
+        });
+    }
 
     {
         let app = app.clone();
@@ -518,28 +721,8 @@ fn build_ui(
     }
 
     window.present();
-
-    // Attach the initial player’s paintable when it becomes available.
-    let player_for_timer = Rc::clone(
-        current_player.borrow().as_ref().expect("initial player exists"),
-    );
-    let picture = picture.clone();
-
-    glib::timeout_add_local(Duration::from_millis(250), move || {
-        let Some(paintable) = player_for_timer.paintable() else {
-            return glib::ControlFlow::Continue;
-        };
-
-        if paintable.intrinsic_width() > 0
-            && paintable.intrinsic_height() > 0
-        {
-            picture.set_paintable(Some(&paintable));
-            glib::ControlFlow::Break
-        } else {
-            glib::ControlFlow::Continue
-        }
-    });
 }
+
 
 fn main() {
     if let Err(error) = gst::init() {
@@ -552,7 +735,7 @@ fn main() {
         .build();
 
     app.connect_activate(|app| {
-        let player = match Player::new(MOQ_URL, MOQ_BROADCAST, true, true) {
+        let player = match Player::new(MOQ_URL, MOQ_BROADCAST) {
             Ok(player) => Rc::new(player),
             Err(error) => {
                 eprintln!("Could not create player: {error}");
@@ -568,3 +751,4 @@ fn main() {
 
     app.run();
 }
+
