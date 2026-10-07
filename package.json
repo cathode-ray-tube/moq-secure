@@ -13,8 +13,5 @@
     "test:watch": "npm run test:watch --workspace js",
     "test-rust": "npm run generate-test-vectors --workspace js && cargo test",
     "typecheck": "npm run typecheck --workspace js"
-  },
-  "overrides": {
-  "source-map-js": "^1.2.2"
-}
+  }
 }
