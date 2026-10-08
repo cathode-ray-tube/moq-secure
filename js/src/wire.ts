@@ -465,7 +465,7 @@ export async function encryptFrame(
     );
 
     payload = encryptedResult.ciphertext;
-    tag = Uint8Array;
+    tag = Uint8Array.from(encryptedResult.tag);
   }
 
   const unsignedFrame = new Frame({
