@@ -1,5 +1,4 @@
 import { decryptFrame, Frame } from "./wire.js";
-import type { AeadAlgorithm } from "./crypto.js";
 import type { KeyStore } from "./keys.js";
 
 export interface FrameDecrypter {
@@ -216,8 +215,7 @@ export class MoqSecureDecrypter implements FrameDecrypter {
 				this.keyStore,
 				this.broadcasterPublicKey,
 				lease,
-				ciphertext,
-				this.algorithm,
+				ciphertext
 			);
 
 			/*
