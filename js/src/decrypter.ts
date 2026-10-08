@@ -15,7 +15,6 @@ export interface FrameDecrypter {
 export interface MoqSecureDecrypterProps {
 	keyStore: KeyStore;
 	broadcasterPublicKey: Uint8Array;
-	algorithm: AeadAlgorithm;
 }
 
 export type PlaybackMode = "live" | "rewind";
@@ -41,7 +40,6 @@ interface CounterState {
 export class MoqSecureDecrypter implements FrameDecrypter {
 	readonly keyStore: KeyStore;
 	readonly broadcasterPublicKey: Uint8Array;
-	readonly algorithm: AeadAlgorithm;
 
 	#leaseRemaining = 0;
 	#mode: PlaybackMode = "live";
@@ -61,19 +59,16 @@ export class MoqSecureDecrypter implements FrameDecrypter {
 		this.keyStore = props.keyStore;
 		this.broadcasterPublicKey =
 			props.broadcasterPublicKey.slice();
-		this.algorithm = props.algorithm;
 	}
 
 	static withLease(
 		keyStore: KeyStore,
 		broadcasterPublicKey: Uint8Array,
 		leaseRemaining: number,
-		algorithm: AeadAlgorithm = "CHACHA20-POLY1305",
 	): MoqSecureDecrypter {
 		const decrypter = new MoqSecureDecrypter({
 			keyStore,
 			broadcasterPublicKey,
-			algorithm,
 		});
 
 		decrypter.#setLease(leaseRemaining);
@@ -215,7 +210,7 @@ export class MoqSecureDecrypter implements FrameDecrypter {
 				this.keyStore,
 				this.broadcasterPublicKey,
 				lease,
-				ciphertext
+				ciphertext,
 			);
 
 			/*
@@ -234,3 +229,4 @@ export class MoqSecureDecrypter implements FrameDecrypter {
 		}
 	}
 }
+
