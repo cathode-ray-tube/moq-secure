@@ -16,6 +16,12 @@ function getWebCrypto(): Crypto {
   return cryptoObject;
 }
 
+function toWebCryptoBuffer(data: Uint8Array): Uint8Array<ArrayBuffer> {
+  const copy = new Uint8Array(data.byteLength);
+  copy.set(data);
+  return copy;
+}
+
 function asUint8Array(data: ArrayBuffer): Uint8Array {
   return new Uint8Array(data);
 }
@@ -24,10 +30,7 @@ export function sha256Digest(data: Uint8Array): Uint8Array {
   return sha256(data);
 }
 
-function validateAeadInputs(
-  key: Uint8Array,
-  tag?: Uint8Array,
-): void {
+function validateAeadInputs(key: Uint8Array, tag?: Uint8Array): void {
   if (key.length !== 32) {
     throw new RangeError("AEAD key must be 32 bytes");
   }
@@ -67,7 +70,7 @@ async function encryptAes256Gcm(
 
   const cryptoKey = await cryptoObject.subtle.importKey(
     "raw",
-    key,
+    toWebCryptoBuffer(key),
     { name: "AES-GCM" },
     false,
     ["encrypt"],
@@ -76,12 +79,12 @@ async function encryptAes256Gcm(
   const combined = await cryptoObject.subtle.encrypt(
     {
       name: "AES-GCM",
-      iv: deriveNonce12(keyId, ctr),
-      additionalData: aad,
+      iv: toWebCryptoBuffer(deriveNonce12(keyId, ctr)),
+      additionalData: toWebCryptoBuffer(aad),
       tagLength: AEAD_TAG_LEN * 8,
     },
     cryptoKey,
-    plaintext,
+    toWebCryptoBuffer(plaintext),
   );
 
   const combinedBytes = asUint8Array(combined);
@@ -91,9 +94,7 @@ async function encryptAes256Gcm(
       0,
       combinedBytes.length - AEAD_TAG_LEN,
     ),
-    tag: combinedBytes.slice(
-      combinedBytes.length - AEAD_TAG_LEN,
-    ),
+    tag: combinedBytes.slice(combinedBytes.length - AEAD_TAG_LEN),
   };
 }
 
@@ -109,22 +110,10 @@ export async function aeadEncrypt(
 
   switch (algorithm) {
     case "CHACHA20-POLY1305":
-      return encryptChaCha20Poly1305(
-        key,
-        keyId,
-        ctr,
-        aad,
-        plaintext,
-      );
+      return encryptChaCha20Poly1305(key, keyId, ctr, aad, plaintext);
 
     case "AES-256-GCM":
-      return encryptAes256Gcm(
-        key,
-        keyId,
-        ctr,
-        aad,
-        plaintext,
-      );
+      return encryptAes256Gcm(key, keyId, ctr, aad, plaintext);
 
     default:
       throw new RangeError(`Unsupported AEAD algorithm: ${algorithm}`);
@@ -171,7 +160,7 @@ async function decryptAes256Gcm(
   try {
     const cryptoKey = await cryptoObject.subtle.importKey(
       "raw",
-      key,
+      toWebCryptoBuffer(key),
       { name: "AES-GCM" },
       false,
       ["decrypt"],
@@ -180,12 +169,12 @@ async function decryptAes256Gcm(
     const plaintext = await cryptoObject.subtle.decrypt(
       {
         name: "AES-GCM",
-        iv: deriveNonce12(keyId, ctr),
-        additionalData: aad,
+        iv: toWebCryptoBuffer(deriveNonce12(keyId, ctr)),
+        additionalData: toWebCryptoBuffer(aad),
         tagLength: AEAD_TAG_LEN * 8,
       },
       cryptoKey,
-      combined,
+      toWebCryptoBuffer(combined),
     );
 
     return asUint8Array(plaintext);
