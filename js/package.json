@@ -21,13 +21,15 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@noble/ciphers": "^2.3.0",
-    "@noble/ed25519": "^3.1.0",
-    "@noble/hashes": "^2.3.0",
     "@types/node": "^22.0.0",
     "tsup": "^8.5.0",
     "tsx": "^4.23.12",
     "typescript": "^5.0.0",
     "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.3.0",
+    "@noble/ed25519": "^3.1.0",
+    "@noble/hashes": "^2.4.0"
   }
 }

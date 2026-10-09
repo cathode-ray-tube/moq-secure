@@ -96,6 +96,54 @@
       "signature": "02ee1da6832bfd68cb431b3fc3af0eb8282013d4c84660ce27a85cb82d78be718d0a77b3b6380d3821c434379adba70209b93ccc83cb03c9686221d0f3f8630a",
       "initialLease": 1,
       "lease": 0
+    },
+    {
+      "name": "aes256gcm_unsigned_empty",
+      "plaintext": "",
+      "padLen": 0,
+      "frame": "4d4f51530107000000000000000a0000023774c058256a3cfec68dc3c843517ca3f96f2bc8",
+      "header": "4d4f51530107000000000000000a000002",
+      "payload": "3774c058",
+      "tag": "256a3cfec68dc3c843517ca3f96f2bc8",
+      "signature": null,
+      "initialLease": 0,
+      "lease": 0
+    },
+    {
+      "name": "aes256gcm_unsigned_binary",
+      "plaintext": "0001027f80feff",
+      "padLen": 3,
+      "frame": "4d4f51530107000000000000000b000002542365afb0a9ae6261cb73d8f16f7a5600eb8b3d74c4bdad51134863547f",
+      "header": "4d4f51530107000000000000000b000002",
+      "payload": "542365afb0a9ae6261cb73d8f16f",
+      "tag": "7a5600eb8b3d74c4bdad51134863547f",
+      "signature": null,
+      "initialLease": 0,
+      "lease": 0
+    },
+    {
+      "name": "aes256gcm_signed",
+      "plaintext": "7369676e6564204145532d47434d206d65646961",
+      "padLen": 5,
+      "frame": "4d4f51530107000000000000000c030102fde1ae73070ff59161968f76334c2265cb20f79833b15cb815602002915434b4c16f0941a2d02365add6d275fec76c98f2419515a3790d2b13f09135ed995516690c2a491d7717f381a3ec481a74a343ff125c0e07290e49231c4ba1020ac77740ce17ae71eecd01150b0d8306",
+      "header": "4d4f51530107000000000000000c030102",
+      "payload": "fde1ae73070ff59161968f76334c2265cb20f79833b15cb81560200291",
+      "tag": "5434b4c16f0941a2d02365add6d275fe",
+      "signature": "c76c98f2419515a3790d2b13f09135ed995516690c2a491d7717f381a3ec481a74a343ff125c0e07290e49231c4ba1020ac77740ce17ae71eecd01150b0d8306",
+      "initialLease": 0,
+      "lease": 2
+    },
+    {
+      "name": "aes256gcm_signed_once",
+      "plaintext": "4145532d47434d207369676e6564206f6e6365",
+      "padLen": 0,
+      "frame": "4d4f51530107000000000000000d010102f67621c69b35dd4c5719fe2a01af3f43c803bd4cf2322e1aa67dcdcec84d9dc8242ccb2b863b8c47aaf36063c58fab0a2e53f150846a061345c32c320d1a079ac415634ac0ee063249c94c30a4d5a3a33351c734bf125c3ac5eef96bab39d6d73ea5df23a3df0e",
+      "header": "4d4f51530107000000000000000d010102",
+      "payload": "f67621c69b35dd4c5719fe2a01af3f43c803bd4cf2322e",
+      "tag": "1aa67dcdcec84d9dc8242ccb2b863b8c",
+      "signature": "47aaf36063c58fab0a2e53f150846a061345c32c320d1a079ac415634ac0ee063249c94c30a4d5a3a33351c734bf125c3ac5eef96bab39d6d73ea5df23a3df0e",
+      "initialLease": 2,
+      "lease": 0
     }
   ]
 }
