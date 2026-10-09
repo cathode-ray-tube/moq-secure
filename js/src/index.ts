@@ -6,3 +6,5 @@ export * from "./keys.js";
 export * from "./crypto.js";
 export * from "./wire.js";
 export * from "./streams.js";
+export * from "./encrypter.js";
+export * from "./decrypter.js";
