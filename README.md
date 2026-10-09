@@ -67,7 +67,7 @@ The default encryption algorithm is ChaCha20-Poly1305. AES-256-GCM is also suppo
 
 This is a demonstration application. For production use, harden key management, key distribution, authentication and TLS configuration.
 
-See the full [README.md](https://github.com/cathode-ray-tube/moq-secure/blob/main/rs/examples/moq-secure-chat-cli/README.md) for complete usage, configuration options, troubleshooting, and security notes.
+See the full [README.md](https://github.com/cathode-ray-tube/moq-secure/blob/main/rs/examples/moq-secure-chat-cli/README.md) for complete usage, configuration options, troubleshooting and security notes.
 ## Quick Start (`moq-player`)
 
 ![moq-player screenshot](https://raw.githubusercontent.com/cathode-ray-tube/moq-secure/main/assets/moq-player.jpg)
