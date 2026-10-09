@@ -1,6 +1,6 @@
 # moq-player
 
-A native desktop player for MoQ audio/video streams, built with Rust, GTK4, and GStreamer.
+A native desktop player for MoQ audio/video streams, built with Rust, GTK4 and GStreamer.
 
 The application subscribes to a MoQ broadcast through GStreamer's `moqsrc` element, decodes H.264 video and AAC audio, and renders them in a GTK4 window. Use the Settings panel to choose a layout and configure the URL and broadcast for each tile.
 
@@ -198,7 +198,7 @@ moq-player
 6. Use **Play** or **Stop** to control all active players.
 7. Select **Quit** or close the window to exit.
 
-Changing a layout rebuilds the settings panel and the number of stream inputs. Applying settings stops the old pipelines, replaces them, and starts the new ones.
+Changing a layout rebuilds the settings panel and the number of stream inputs. Applying settings stops the old pipelines, replaces them and starts the new ones.
 
 ## Troubleshooting
 
