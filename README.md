@@ -65,7 +65,7 @@ The default encryption algorithm is ChaCha20-Poly1305. AES-256-GCM is also suppo
 --encryption aes-256-gcm
 ```
 
-This is a demonstration application. For production use, harden key management, key distribution, authentication, and TLS configuration.
+This is a demonstration application. For production use, harden key management, key distribution, authentication and TLS configuration.
 
 See the full [README.md](https://github.com/cathode-ray-tube/moq-secure/blob/main/rs/examples/moq-secure-chat-cli/README.md) for complete usage, configuration options, troubleshooting, and security notes.
 ## Quick Start (`moq-player`)
@@ -75,11 +75,11 @@ See the full [README.md](https://github.com/cathode-ray-tube/moq-secure/blob/mai
 [![crates.io version](https://img.shields.io/crates/v/moq-player.svg)](https://crates.io/crates/moq-player)
 [![Downloads](https://img.shields.io/crates/d/moq-player.svg)](https://crates.io/crates/moq-player)
 
-A native desktop player for MoQ audio/video streams using Rust, GTK4, and GStreamer.
+A native desktop player for MoQ audio/video streams using Rust, GTK4 and GStreamer.
 
 See [README.md](https://github.com/cathode-ray-tube/moq-secure/blob/main/rs/examples/moq-player/README.md) for full instructions.
 
-> **MoQ-Secure is not integrated.** This version does not encrypt, decrypt, or verify media using MoQ-Secure.
+> **MoQ-Secure is not integrated.** This version does not encrypt, decrypt or verify media using MoQ-Secure.
 
 ## Specification
 
