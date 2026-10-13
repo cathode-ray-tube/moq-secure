@@ -285,7 +285,7 @@ key_id
 ctr
 n_signed
 sig_flag
-encrypted
+encryption_type
 ```
 
 Validate the magic, supported version, and flag values.
