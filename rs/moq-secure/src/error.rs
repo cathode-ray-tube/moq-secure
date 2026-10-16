@@ -53,8 +53,5 @@ pub enum MoqSecureError {
 
     #[error("encryption counter exhausted")]
     EncryptionCounterExhausted,
-
-    #[error(transparent)]
-    Secure(#[from] moq_secure::MoqSecureError),
 }
 
