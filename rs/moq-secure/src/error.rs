@@ -50,5 +50,11 @@ pub enum MoqSecureError {
 
     #[error("replay detected, ctr lower than previous high watermark")]
     ReplayDetected,
+
+    #[error("encryption counter exhausted")]
+    EncryptionCounterExhausted,
+
+    #[error(transparent)]
+    Secure(#[from] moq_secure::MoqSecureError),
 }
 
