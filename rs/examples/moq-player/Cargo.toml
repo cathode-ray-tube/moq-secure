@@ -14,6 +14,7 @@ categories = ["multimedia", "gui"]
 gtk4 = "0.9"
 glib = "0.20"
 gstreamer = "0.23"
+url = "2"
 
 [[bin]]
 name = "moq-player"
