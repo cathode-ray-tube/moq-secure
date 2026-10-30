@@ -2077,6 +2077,7 @@ dependencies = [
  "glib",
  "gstreamer",
  "gtk4",
+ "url",
 ]
 
 [[package]]

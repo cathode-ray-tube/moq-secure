@@ -5,5 +5,4 @@ members = [
     "rs/moq-secure",
     "rs/examples/moq-secure-chat",
     "rs/examples/moq-secure-chat-cli",
-    "rs/examples/moq-player",
 ]
