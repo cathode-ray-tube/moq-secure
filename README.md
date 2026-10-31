@@ -5,6 +5,7 @@
 [![CodeQL](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/github-code-scanning/codeql)
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
 [![crates.io version](https://img.shields.io/crates/v/moq-secure.svg)](https://crates.io/crates/moq-secure)
+[![npm](https://img.shields.io/npm/v/moq-secure)](https://www.npmjs.com/package/moq-secure)
 [![Downloads](https://img.shields.io/crates/d/moq-secure.svg)](https://crates.io/crates/moq-secure)
 [![docs.rs](https://img.shields.io/docsrs/moq-secure)](https://docs.rs/moq-secure)
 
