@@ -7,7 +7,7 @@ export interface FrameDecrypter {
 	 *
 	 * The returned plaintext is:
 	 *
-	 *   timestamp varint || codec payload
+	 *   original payload
 	 */
 	decrypt(ciphertext: Uint8Array): Promise<Uint8Array>;
 }
