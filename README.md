@@ -34,6 +34,10 @@ MoQ-Secure is designed to provide:
 
 Publishers are able to use **any** public MoQ CDN, with the hosting provider unable to see the content. Consumers can verify the publisher of the content, wherever they receive it from.
 
+## Quick Start (`moq-secure-publish`)
+
+Go to [NPM](https://www.npmjs.com/package/@cathode-ray-tube/moq-secure-publish) to view instructions for publishing an encrypted stream. `moq-secure-watch`, the companion package to view the broadcast, will be published shortly.
+
 ## Quick Start (`moq-secure-chat-cli`)
 
 A terminal chat demo using MoQ with end-to-end encryption and Ed25519 message signing via [`moq-secure-chat`](https://github.com/cathode-ray-tube/moq-secure/tree/main/rs/examples/moq-secure-chat).
