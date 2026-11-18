@@ -34,45 +34,15 @@ MoQ-Secure is designed to provide:
 
 Publishers are able to use **any** public MoQ CDN, with the hosting provider unable to see the content. Consumers can verify the publisher of the content, wherever they receive it from.
 
-## Quick Start (`moq-secure-publish`)
+## Quick Start
 
-Go to [NPM](https://www.npmjs.com/package/@cathode-ray-tube/moq-secure-publish) to view instructions for publishing an encrypted stream. `moq-secure-watch`, the companion package to view the broadcast, will be published shortly.
+To try the examples, you’ll need a MoQ relay URL and a broadcast name.
 
-## Quick Start (`moq-secure-chat-cli`)
+1. Open the [`@cathode-ray-tube/moq-secure-publish` README](https://www.npmjs.com/package/@cathode-ray-tube/moq-secure-publish) and follow its example to share video from your screen.
+2. Open the [`@cathode-ray-tube/moq-secure-watch` README](https://www.npmjs.com/package/@cathode-ray-tube/moq-secure-watch) and follow its example to watch the broadcast.
+3. In both examples, enter the same relay URL, broadcast name, and encryption key settings.
 
-A terminal chat demo using MoQ with end-to-end encryption and Ed25519 message signing via [`moq-secure-chat`](https://github.com/cathode-ray-tube/moq-secure/tree/main/rs/examples/moq-secure-chat).
-
-Install Rust and [moq-relay](https://github.com/moq-dev/moq/tree/main/rs/moq-relay), then start a local relay using the example configuration:
-
-```bash
-wget https://raw.githubusercontent.com/moq-dev/moq/refs/heads/main/demo/relay/localhost.toml
-moq-relay localhost.toml
-```
-
-In another terminal, install and start the publisher:
-
-```bash
-cargo install moq-secure-chat-cli
-
-moq-secure-chat-cli \
-  --relay https://localhost:4443/chat \
-  --tls-disable-verify \
-  publish
-```
-
-The publisher generates the broadcast name and cryptographic keys, then prints a complete subscriber command. Copy that command into a third terminal and run it.
-
-Type messages in the publisher terminal to send encrypted, signed chat messages.
-
-The default encryption algorithm is ChaCha20-Poly1305. AES-256-GCM is also supported with:
-
-```bash
---encryption aes-256-gcm
-```
-
-This is a demonstration application. For production use, harden key management, key distribution, authentication and TLS configuration.
-
-See the full [README.md](https://github.com/cathode-ray-tube/moq-secure/blob/main/rs/examples/moq-secure-chat-cli/README.md) for complete usage, configuration options, troubleshooting and security notes.
+The README examples use a test key only. Don’t use it to protect a real broadcast.
 
 ## Specification
 
