@@ -1,4 +1,4 @@
-![moq-secure logo](./assets/moq-secure-logo-256.png)
+![moq-secure-logo-and-badges](./assets/moq-secure-new.jpeg)
 
 [![JavaScript Tests](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/test-js.yml/badge.svg)](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/test-js.yml)
 [![Rust Tests](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/test-rust.yml/badge.svg)](https://github.com/cathode-ray-tube/moq-secure/actions/workflows/test-rust.yml)
