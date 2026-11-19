@@ -167,7 +167,7 @@ key_id
 ctr
 n_signed
 sig_flag
-encrypted
+encryption_type
 ```  
 
 *The signature trailer is **never** part of the AAD.*  
