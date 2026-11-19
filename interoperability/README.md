@@ -115,7 +115,7 @@ view.setUint32(offset, value, false);      // 32‑bit
 | `keyId` | 0 .. 255 |
 | `nSigned` | 0 .. 255 |
 | `sigFlag` | 0 or 1 |
-| `encrypted` | 0 or 1 |
+| `encryption_type` | 0, 1 or 2 |
 | `padLen` | 0 .. 4,294,967,295 (`u32`) |
 | `ctr` | 0 .. 2⁶⁴‑1 (`bigint`) |
 
